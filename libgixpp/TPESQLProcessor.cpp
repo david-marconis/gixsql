@@ -230,12 +230,38 @@ int TPESQLProcessor::outputESQL()
 		return 1;
 
 	// If we are using "smart" cursor initialization, the block containing the initialization code goes at the end of the program
-	// otherwise it has already been output at the start of the PROCEDURE DIVISION
+	// otherwise it has already been output at the start of the PROCEDURE DIVISION.
+	// The block is executable COBOL (GO TO / paragraphs), so if the source ends with
+	// an END PROGRAM statement the block must be inserted *before* it -- emitting
+	// paragraphs after END PROGRAM is invalid COBOL (cobc: "unexpected GO, expecting
+	// PROGRAM-ID"). Pull a trailing END PROGRAM (and any blank/comment lines after
+	// it) aside, emit the cursor block, then restore them.
+	std::vector<std::string> trailing_end_program;
+	{
+		auto is_blank_or_comment = [](const std::string& s) {
+			return trim_copy(s).empty() || (s.size() > 6 && (s[6] == '*' || s[6] == '/'));
+		};
+		auto is_end_program = [](const std::string& s) {
+			std::string u = to_upper(trim_copy(s.size() > 6 ? s.substr(6) : s));
+			return starts_with(u, "END PROGRAM") || starts_with(u, "END-PROGRAM");
+		};
+		int i = (int)output_lines.size() - 1;
+		while (i >= 0 && is_blank_or_comment(output_lines[i])) i--;
+		if (i >= 0 && is_end_program(output_lines[i])) {
+			for (int k = i; k < (int)output_lines.size(); k++)
+				trailing_end_program.push_back(output_lines[k]);
+			output_lines.resize(i);
+			output_line -= (int)trailing_end_program.size();
+		}
+	}
+
 	input_file_stack.push(filename_clean_path(input_file));
 	if (!put_cursor_declarations()) {
 		raise_error("An error occurred while generating ESQL cursor declarations", ERR_CRSR_GEN);
 		return 1;
 	}
+	for (const auto& l : trailing_end_program)   // restore END PROGRAM after the block
+		put_output_line(l);                      // (before pop: put_output_line reads input_file_stack.top())
 	input_file_stack.pop();
 
 
