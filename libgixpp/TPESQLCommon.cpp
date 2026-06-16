@@ -1,6 +1,12 @@
 #include "TPESQLCommon.h"
 #include "varlen_defs.h"
+#include "libcpputils.h"
 
+// Host-variable names are matched case-insensitively. COBOL data-names are
+// case-insensitive, so a host reference may differ in case from the field's
+// declaration (e.g. a 01 GRP-FILE-TYPE declaration referenced as :Grp-File-Type).
+// Normalize the field-map key to upper on every insert and lookup. (Companion to
+// the keyword case-insensitivity fix in gix_esql_scanner.ll / gix_esql_driver.cc.)
 void ESQLParserData::add_to_field_map(std::string k, cb_field_ptr f)
 {
 #if defined(_WIN32) && defined(_DEBUG) && defined(VERBOSE)
@@ -8,12 +14,12 @@ void ESQLParserData::add_to_field_map(std::string k, cb_field_ptr f)
 	sprintf(bfr, "Adding field to field_map: %s\n", k.c_str());
 	OutputDebugStringA(bfr);
 #endif
-	_field_map[k] = f;
+	_field_map[to_upper(k)] = f;
 }
 
 cb_field_ptr ESQLParserData::field_map(std::string k)
 {
-	return field_exists(k) ? _field_map[k] : nullptr;
+	return field_exists(k) ? _field_map[to_upper(k)] : nullptr;
 }
 
 std::tuple<uint64_t, int, int, std::string> ESQLParserData::field_sql_type_info(const std::string& n)
@@ -74,7 +80,7 @@ ESQLParserData::ESQLParserData()
 
 bool ESQLParserData::field_exists(const std::string& f)
 {
-	return (_field_map.find(f) != _field_map.end());
+	return (_field_map.find(to_upper(f)) != _field_map.end());
 }
 
 std::map<std::string, cb_field_ptr>& ESQLParserData::get_field_map() const

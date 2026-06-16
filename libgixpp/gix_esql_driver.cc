@@ -218,7 +218,8 @@ std::vector<cb_sql_token_t> *gix_esql_driver::cb_concat_text_list(std::vector<cb
 std::string gix_esql_driver::cb_host_list_add(std::vector<cb_hostreference_ptr> *list, std::string text)
 {
 	// Handle placeholders for group items passed as host variables
-	if (map_contains(parser_data()->get_field_map(), text.substr(1))) {
+	// (case-insensitive: field_map keys are normalized to upper — see TPESQLCommon.cpp)
+	if (map_contains(parser_data()->get_field_map(), to_upper(text.substr(1)))) {
 		CobolVarType f_type = CobolVarType::UNKNOWN;
 		int f_size = 0, f_scale = 0;
 		cb_field_ptr f = parser_data()->field_map(text.substr(1));
