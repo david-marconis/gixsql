@@ -153,5 +153,30 @@ bool CopyResolver::resolve_from_dir(const std::string& copy_dir, const std::stri
 		if (verbose)
 			printf("KO\n");
 	}
+
+	// Case-insensitive fallback: COBOL COPY text-names are case-insensitive, but the
+	// exact-case probes above resolve against the filesystem, which on Linux is
+	// usually case-sensitive. A COPY whose member file differs from the reference
+	// only in case (e.g. COPY foo -> FOO.cpy) is otherwise missed. Scan the dir once
+	// for an entry whose name matches copy_name + any configured extension,
+	// ignoring case.
+	{
+		std::error_code ec;
+		std::string base = to_upper(trim_copy(copy_name));
+		for (auto& de : std::filesystem::directory_iterator(copy_dir, ec)) {
+			if (ec) break;
+			std::string fn = to_upper(de.path().filename().string());
+			for (std::string ext : copy_exts) {
+				std::string e = (ext == ".") ? "" : ext;
+				if (fn == base + to_upper(e)) {
+					copy_file = filename_absolute_path(de.path());
+					resolve_cache[copy_name] = copy_file;
+					if (verbose)
+						printf("OK (case-insensitive: %s)\n", de.path().string().c_str());
+					return true;
+				}
+			}
+		}
+	}
 	return false;
 }
