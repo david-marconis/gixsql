@@ -136,7 +136,7 @@ SUBSYSTEM "SQL"|"CICS"|"DLI"
 "EXEC"[ \r\n]+({SUBSYSTEM}) {
 
 	std::string t = yytext;
-	std::string subsystem = t.substr(t.find_last_of(" \r\n") + 1);
+	std::string subsystem = to_upper(t.substr(t.find_last_of(" \r\n") + 1));
 
 	if (subsystem == "SQL") {
 		__yy_push_state(ESQL_FUNC_STATE); 
@@ -341,7 +341,7 @@ SUBSYSTEM "SQL"|"CICS"|"DLI"
 	"SELECT" {
 		__yy_push_state(ESQL_STATE); 
 
-		driver->commandname = yytext;
+		driver->commandname = to_upper(yytext);
 
 		driver->sqlnum++;
 		driver->sqlname = string_format("SQ%04d", driver->sqlnum);
@@ -352,7 +352,7 @@ SUBSYSTEM "SQL"|"CICS"|"DLI"
 	"INSERT" {
 		__yy_push_state(ESQL_STATE); 
 
-		driver->commandname = yytext;
+		driver->commandname = to_upper(yytext);
 					
 		driver->sqlnum++;
 		driver->sqlname = string_format("SQ%04d", driver->sqlnum);
@@ -363,7 +363,7 @@ SUBSYSTEM "SQL"|"CICS"|"DLI"
 	"DELETE" {
 		__yy_push_state(ESQL_STATE); 
 
-		driver->commandname = yytext;
+		driver->commandname = to_upper(yytext);
 					
 		driver->sqlnum++;
 		driver->sqlname = string_format("SQ%04d", driver->sqlnum);
@@ -389,14 +389,14 @@ SUBSYSTEM "SQL"|"CICS"|"DLI"
 	"DISCONNECT" {
 		__yy_push_state(ESQL_STATE); 
 
-		driver->commandname = yytext;		
+		driver->commandname = to_upper(yytext);		
 		return yy::gix_esql_parser::make_DISCONNECT(yytext, loc);
 	}
 
 	"UPDATE" {
 		__yy_push_state(ESQL_STATE); 
 
-		driver->commandname = yytext;
+		driver->commandname = to_upper(yytext);
 					
 		driver->sqlnum++;
 		driver->sqlname = string_format("SQ%04d", driver->sqlnum);
@@ -931,7 +931,7 @@ SUBSYSTEM "SQL"|"CICS"|"DLI"
 	
 	"SELECT" {
 
-		driver->commandname = yytext;
+		driver->commandname = to_upper(yytext);
 						
 		driver->sqlnum++;
      	driver->sqlname = string_format("SQ%04d", driver->sqlnum);

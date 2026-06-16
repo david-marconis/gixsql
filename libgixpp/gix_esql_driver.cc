@@ -338,7 +338,7 @@ gix_esql_driver::cb_set_cursorname(std::string text)
 void
 gix_esql_driver::cb_set_commandname(std::string text)
 {
-	commandname = text;
+	commandname = to_upper(text);
 }
 
 void
