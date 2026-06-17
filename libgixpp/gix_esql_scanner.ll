@@ -90,6 +90,20 @@ const char *GixEsqlLexer::yy_state_descs[NUM_YY_STATES] = { "INITIAL", "PICTURE_
 
 yy::gix_esql_parser::symbol_type __MAKE_TOKEN(char *s, yy::location loc);
 
+// A host-variable reference (":name", or ":var:ind") may have its colon
+// separated from the name by spaces and/or a line break — e.g. a SELECT
+// clause that wraps after "... <= :" onto the next source line, or an inline
+// "<=: name". The HOSTWORD / HOSTTOKEN_WITH_NULL_IND patterns below tolerate
+// that interior whitespace; strip it back out here so the token handed to the
+// parser is the canonical ":NAME" (or ":VAR:IND") the field lookup expects.
+static std::string normalize_hostref(const char *s) {
+	std::string r;
+	for (const char *p = s; *p; ++p)
+		if (!isspace((unsigned char)*p))
+			r += *p;
+	return r;
+}
+
 %}
 
 /* Options: */
@@ -125,8 +139,12 @@ COMPARISON "="|"<>"|"<"|">"|"<="|">="
 COMMA ","
 PGSQL_CAST_OP "::"
 /* HOSTTOKEN_WITH_NULL_IND ":"([A-Za-z\-0-9_]*([\xA0-\xDF]|([\x81-\x9F\xE0-\xFC][\x40-\x7E\x80-\xFC]))*[A-Za-z\-0-9_]*)":"([A-Za-z\-0-9_]*([\xA0-\xDF]|([\x81-\x9F\xE0-\xFC][\x40-\x7E\x80-\xFC]))*[A-Za-z\-0-9_]*) */
-HOSTTOKEN_WITH_NULL_IND ":"([A-Za-z\-0-9_]+)":"([A-Za-z\-0-9_]+)
-HOSTWORD ":"([A-Za-z\-0-9_]*([\xA0-\xDF]|([\x81-\x9F\xE0-\xFC][\x40-\x7E\x80-\xFC]))*[A-Za-z\-0-9_]*)
+HOSTTOKEN_WITH_NULL_IND ":"[ \t\r\n]*([A-Za-z\-0-9_]+)[ \t\r\n]*":"[ \t\r\n]*([A-Za-z\-0-9_]+)
+/* HOSTWORD: contiguous ":name" (first alternative, byte-identical to upstream)
+   OR ":" + whitespace/newline + name (second alternative) — the latter lets a
+   host reference that wraps across a source line, or has a space after the
+   colon, still resolve.  normalize_hostref() strips the interior whitespace. */
+HOSTWORD (":"([A-Za-z\-0-9_]*([\xA0-\xDF]|([\x81-\x9F\xE0-\xFC][\x40-\x7E\x80-\xFC]))*[A-Za-z\-0-9_]*))|(":"[ \t\r\n]+([A-Za-z\-0-9_]+([\xA0-\xDF]|([\x81-\x9F\xE0-\xFC][\x40-\x7E\x80-\xFC]))*[A-Za-z\-0-9_]*))
 INT_CONSTANT {digit}+
 LOW_VALUE "LOW\-VALUE"
 SUBSYSTEM "SQL"|"CICS"|"DLI"
@@ -202,10 +220,11 @@ SUBSYSTEM "SQL"|"CICS"|"DLI"
 	
 <ESQL_DBNAME_STATE>{
 	{HOSTWORD} {
-		driver->connectionid = new hostref_or_literal_t(yytext, false);
+		std::string hv = normalize_hostref(yytext);
+		driver->connectionid = new hostref_or_literal_t(hv, false);
 		__yy_pop_state();
 
-		return yy::gix_esql_parser::make_HOSTTOKEN(yytext, loc);
+		return yy::gix_esql_parser::make_HOSTTOKEN(hv, loc);
 	}
 
 	({WORD}|{JPNWORD})+ {
@@ -230,7 +249,7 @@ SUBSYSTEM "SQL"|"CICS"|"DLI"
 	}
 
 	{HOSTWORD} {
-		return yy::gix_esql_parser::make_HOSTTOKEN(yytext, loc);
+		return yy::gix_esql_parser::make_HOSTTOKEN(normalize_hostref(yytext), loc);
 	}
 
 	{STRVALUE} {
@@ -273,11 +292,11 @@ SUBSYSTEM "SQL"|"CICS"|"DLI"
 	}
 
 	{HOSTTOKEN_WITH_NULL_IND} {
-		return yy::gix_esql_parser::make_HOSTTOKEN_WITH_NULL_IND(yytext, loc);
+		return yy::gix_esql_parser::make_HOSTTOKEN_WITH_NULL_IND(normalize_hostref(yytext), loc);
 	}
 
 	{HOSTWORD} {
-		return yy::gix_esql_parser::make_HOSTTOKEN(yytext, loc);
+		return yy::gix_esql_parser::make_HOSTTOKEN(normalize_hostref(yytext), loc);
 	}
 
 	{STRVALUE} {
@@ -592,7 +611,7 @@ SUBSYSTEM "SQL"|"CICS"|"DLI"
 	}
 
 	{HOSTWORD} { 
-		return yy::gix_esql_parser::make_HOSTTOKEN(yytext, loc);
+		return yy::gix_esql_parser::make_HOSTTOKEN(normalize_hostref(yytext), loc);
 	}
 
 	([A-Za-z\-0-9_]|{JPNWORD})+ {
@@ -641,7 +660,7 @@ SUBSYSTEM "SQL"|"CICS"|"DLI"
 
 	
 	{HOSTWORD} { 
-		return yy::gix_esql_parser::make_HOSTTOKEN(yytext, loc);
+		return yy::gix_esql_parser::make_HOSTTOKEN(normalize_hostref(yytext), loc);
 	}
 
 	{STRVALUE} {
@@ -752,12 +771,12 @@ SUBSYSTEM "SQL"|"CICS"|"DLI"
 	}
 
 	{HOSTTOKEN_WITH_NULL_IND} {
-		return yy::gix_esql_parser::make_HOSTTOKEN_WITH_NULL_IND(yytext, loc);
+		return yy::gix_esql_parser::make_HOSTTOKEN_WITH_NULL_IND(normalize_hostref(yytext), loc);
 	}
 
 	{HOSTWORD} {
 			driver->hostlineno = yylineno;
-			return yy::gix_esql_parser::make_HOSTTOKEN(yytext, loc);
+			return yy::gix_esql_parser::make_HOSTTOKEN(normalize_hostref(yytext), loc);
 	}
 	
 	{STRVALUE} {
@@ -979,7 +998,7 @@ SUBSYSTEM "SQL"|"CICS"|"DLI"
 	
 	{HOSTWORD} {
 		driver->hostlineno = yylineno;
-		return yy::gix_esql_parser::make_HOSTTOKEN(yytext, loc);
+		return yy::gix_esql_parser::make_HOSTTOKEN(normalize_hostref(yytext), loc);
 	}
 
 	{PGSQL_CAST_OP} {
