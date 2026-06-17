@@ -116,6 +116,11 @@ public:
     std::vector<cb_sql_token_t> *cb_concat_text_list(std::vector<cb_sql_token_t> *list, std::vector<cb_sql_token_t> *targetlist);
 
     std::string cb_host_list_add(std::vector<cb_hostreference_ptr> *list, std::string text);
+    // Flatten a group host variable into its elementary leaves, in declaration
+    // order, descending through nested (non-varlen) subgroups — mirrors
+    // TPESQLProcessor::collect_group_leaves so the SQL placeholders the driver
+    // emits and the parameters the processor binds stay in lockstep.
+    void cb_collect_group_leaves(cb_field_ptr f, std::vector<cb_field_ptr> &out);
     //std::string cb_host_list_add_force(std::vector<cb_hostreference_ptr> *list, std::string text);
     
     void cb_res_host_list_add(std::vector<cb_res_hostreference_ptr> *list, std::string text);

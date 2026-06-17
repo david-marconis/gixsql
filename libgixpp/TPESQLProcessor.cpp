@@ -967,12 +967,13 @@ bool TPESQLProcessor::handle_esql_stmt(const ESQL_Command cmd, const cb_exec_sql
 
 			std::string var_name, ind_name;
 			bool has_indicator = decode_indicator(rp->hostreference.substr(1), var_name, ind_name);
-			if (!parser_data->field_exists(var_name)) {
+			std::string var_ref;
+			cb_field_ptr hr = resolve_hostref(var_name, var_ref);
+			if (!hr) {
 				raise_error("Cannot find host variable: " + var_name, ERR_MISSING_HOSTVAR, stmt->src_abs_path, rp->lineno);
 				return false;
 			}
 
-			cb_field_ptr hr = parser_data->field_map(var_name);
 			bool is_varlen = parser_data->get_actual_field_data(hr, &f_type, &f_size, &f_scale);
 
 			// Support for group items used as host variables in SELECT statements
@@ -1033,7 +1034,7 @@ bool TPESQLProcessor::handle_esql_stmt(const ESQL_Command cmd, const cb_exec_sql
 				rp_call.addParameter(f_size, BY_VALUE);
 				rp_call.addParameter(f_scale > 0 ? -f_scale : 0, BY_VALUE);
 				rp_call.addParameter(flags, BY_VALUE);
-				rp_call.addParameter(var_name, BY_REFERENCE);
+				rp_call.addParameter(var_ref, BY_REFERENCE);
 				if (has_indicator)
 					rp_call.addParameter(ind_name, BY_REFERENCE);
 				else
@@ -1115,12 +1116,13 @@ bool TPESQLProcessor::handle_esql_stmt(const ESQL_Command cmd, const cb_exec_sql
 
 			std::string var_name, ind_name;
 			bool has_indicator = decode_indicator(p->hostreference.substr(1), var_name, ind_name);
-			if (!parser_data->field_exists(var_name)) {
+			std::string var_ref;
+			cb_field_ptr hr = resolve_hostref(var_name, var_ref);
+			if (!hr) {
 				raise_error("Cannot find host variable: " + p->hostreference.substr(1), ERR_MISSING_HOSTVAR, stmt->src_abs_path, p->lineno);
 				return false;
 			}
 
-			cb_field_ptr hr = parser_data->field_map(var_name);
 			bool is_varlen = parser_data->get_actual_field_data(hr, &f_type, &f_size, &f_scale);
 
 			// Support for group items used as host variables in INSERT statements
@@ -1190,7 +1192,7 @@ bool TPESQLProcessor::handle_esql_stmt(const ESQL_Command cmd, const cb_exec_sql
 				p_call.addParameter(f_size, BY_VALUE);
 				p_call.addParameter(f_scale > 0 ? -f_scale : 0, BY_VALUE);
 				p_call.addParameter(flags, BY_VALUE);
-				p_call.addParameter(var_name, BY_REFERENCE);
+				p_call.addParameter(var_ref, BY_REFERENCE);
 				if (has_indicator)
 					p_call.addParameter(ind_name, BY_REFERENCE);
 				else
@@ -2034,6 +2036,51 @@ std::string TPESQLProcessor::field_qualified_name(cb_field_ptr f)
 	return n;
 }
 
+cb_field_ptr TPESQLProcessor::find_descendant_field(cb_field_ptr root, const std::string& name)
+{
+	std::string target = to_upper(name);
+	for (cb_field_ptr c = root->children; c; c = c->sister) {
+		if (to_upper(c->sname) == target)
+			return c;
+		cb_field_ptr d = find_descendant_field(c, name);
+		if (d)
+			return d;
+	}
+	return nullptr;
+}
+
+cb_field_ptr TPESQLProcessor::resolve_hostref(const std::string& ref, std::string& cobol_ref)
+{
+	const size_t dot = ref.find('.');
+	if (dot == std::string::npos) {
+		// Plain reference: behave exactly as before (bare sname, original case).
+		cobol_ref = ref;
+		return parser_data->field_exists(ref) ? parser_data->field_map(ref) : nullptr;
+	}
+
+	// Qualified DB2 host reference "GROUP.MEMBER[.MEMBER...]" — split on '.'.
+	// The first segment is the (uniquely named) DCLGEN group; each following
+	// segment is matched against the descendants of the previous one.
+	std::vector<std::string> segs;
+	size_t start = 0, p;
+	while ((p = ref.find('.', start)) != std::string::npos) {
+		segs.push_back(ref.substr(start, p - start));
+		start = p + 1;
+	}
+	segs.push_back(ref.substr(start));
+
+	if (!parser_data->field_exists(segs[0]))
+		return nullptr;
+	cb_field_ptr f = parser_data->field_map(segs[0]);
+	for (size_t i = 1; i < segs.size() && f; ++i)
+		f = find_descendant_field(f, segs[i]);
+	if (!f)
+		return nullptr;
+
+	cobol_ref = field_qualified_name(f);
+	return f;
+}
+
 void TPESQLProcessor::collect_group_leaves(cb_field_ptr f, std::vector<cb_field_ptr>& out)
 {
 	for (cb_field_ptr c = f->children; c; c = c->sister) {
@@ -2097,12 +2144,13 @@ bool TPESQLProcessor::put_res_host_parameters(const cb_exec_sql_stmt_ptr stmt, i
 		std::string var_name, ind_name;
 		bool has_indicator = decode_indicator(rp->hostreference.substr(1), var_name, ind_name);
 
-		if (!parser_data->field_exists(var_name)) {
+		std::string var_ref;
+		cb_field_ptr hr = resolve_hostref(var_name, var_ref);
+		if (!hr) {
 			raise_error("Cannot find host variable: " + var_name, ERR_MISSING_HOSTVAR, stmt->src_abs_path, rp->lineno);
 			return false;
 		}
 
-		cb_field_ptr hr = parser_data->field_map(var_name);
 		bool is_varlen = parser_data->get_actual_field_data(hr, &f_type, &f_size, &f_scale);
 
 		// Support for group items used as host variables in SELECT statements
@@ -2158,7 +2206,7 @@ bool TPESQLProcessor::put_res_host_parameters(const cb_exec_sql_stmt_ptr stmt, i
 			rp_call.addParameter(f_size, BY_VALUE);
 			rp_call.addParameter(f_scale > 0 ? -f_scale : 0, BY_VALUE);
 			rp_call.addParameter(flags, BY_VALUE);
-			rp_call.addParameter(var_name, BY_REFERENCE);
+			rp_call.addParameter(var_ref, BY_REFERENCE);
 
 			if (has_indicator)
 				rp_call.addParameter(ind_name, BY_REFERENCE);
@@ -2188,12 +2236,13 @@ bool TPESQLProcessor::put_host_parameters(const cb_exec_sql_stmt_ptr stmt)
 		std::string var_name, ind_name;
 		bool has_indicator = decode_indicator(p->hostreference.substr(1), var_name, ind_name);
 
-		if (!parser_data->field_exists(var_name)) {
+		std::string var_ref;
+		cb_field_ptr hr = resolve_hostref(var_name, var_ref);
+		if (!hr) {
 			raise_error("Cannot find host variable: " + var_name, ERR_MISSING_HOSTVAR, stmt->src_abs_path, p->lineno);
 			return false;
 		}
 
-		cb_field_ptr hr = parser_data->field_map(var_name);
 		bool is_varlen = parser_data->get_actual_field_data(hr, &f_type, &f_size, &f_scale);
 
 		int flags = is_varlen ? CBL_FIELD_FLAG_VARLEN : CBL_FIELD_FLAG_NONE;
@@ -2210,7 +2259,7 @@ bool TPESQLProcessor::put_host_parameters(const cb_exec_sql_stmt_ptr stmt)
 		p_call.addParameter(f_size, BY_VALUE);
 		p_call.addParameter(f_scale > 0 ? -f_scale : 0, BY_VALUE);
 		p_call.addParameter(flags, BY_VALUE);
-		p_call.addParameter(var_name, BY_REFERENCE);
+		p_call.addParameter(var_ref, BY_REFERENCE);
 
 		if (has_indicator)
 			p_call.addParameter(ind_name, BY_REFERENCE);

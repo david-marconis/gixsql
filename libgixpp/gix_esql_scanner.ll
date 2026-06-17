@@ -143,8 +143,16 @@ HOSTTOKEN_WITH_NULL_IND ":"[ \t\r\n]*([A-Za-z\-0-9_]+)[ \t\r\n]*":"[ \t\r\n]*([A
 /* HOSTWORD: contiguous ":name" (first alternative, byte-identical to upstream)
    OR ":" + whitespace/newline + name (second alternative) — the latter lets a
    host reference that wraps across a source line, or has a space after the
-   colon, still resolve.  normalize_hostref() strips the interior whitespace. */
-HOSTWORD (":"([A-Za-z\-0-9_]*([\xA0-\xDF]|([\x81-\x9F\xE0-\xFC][\x40-\x7E\x80-\xFC]))*[A-Za-z\-0-9_]*))|(":"[ \t\r\n]+([A-Za-z\-0-9_]+([\xA0-\xDF]|([\x81-\x9F\xE0-\xFC][\x40-\x7E\x80-\xFC]))*[A-Za-z\-0-9_]*))
+   colon, still resolve.  normalize_hostref() strips the interior whitespace.
+   A trailing ".member" (one or more, e.g. ":struct.field" / ":a.b.c") is a DB2
+   qualified host reference: it names one elementary field disambiguated by its
+   group, NOT the whole group.  Capturing it here keeps the qualifier attached to
+   the host token (otherwise the lexer stops at the name and the "." + member leak
+   into the SQL text, and the bare group name expands to one placeholder per leaf).
+   The "." may be followed by whitespace/newline before the member; normalize_hostref()
+   strips it, yielding the canonical ":GROUP.MEMBER" the field lookup resolves. */
+QUALTAIL (\.[ \t\r\n]*[A-Za-z\-0-9_]+([\xA0-\xDF]|([\x81-\x9F\xE0-\xFC][\x40-\x7E\x80-\xFC]))*[A-Za-z\-0-9_]*)
+HOSTWORD ((":"([A-Za-z\-0-9_]*([\xA0-\xDF]|([\x81-\x9F\xE0-\xFC][\x40-\x7E\x80-\xFC]))*[A-Za-z\-0-9_]*))|(":"[ \t\r\n]+([A-Za-z\-0-9_]+([\xA0-\xDF]|([\x81-\x9F\xE0-\xFC][\x40-\x7E\x80-\xFC]))*[A-Za-z\-0-9_]*))){QUALTAIL}*
 INT_CONSTANT {digit}+
 LOW_VALUE "LOW\-VALUE"
 SUBSYSTEM "SQL"|"CICS"|"DLI"

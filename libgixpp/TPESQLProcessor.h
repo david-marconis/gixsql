@@ -142,6 +142,21 @@ private:
 	// decomposed group leaf is unambiguous when the same name recurs elsewhere.
 	std::string field_qualified_name(cb_field_ptr f);
 
+	// Depth-first search (declaration order) for a descendant field named `name`
+	// (case-insensitive) anywhere under `root`. Used to resolve the member of a
+	// qualified host reference.
+	cb_field_ptr find_descendant_field(cb_field_ptr root, const std::string& name);
+
+	// Resolve a host-variable name to its field. A plain "NAME" goes straight
+	// through field_map. A DB2 qualified reference "GROUP.MEMBER" (one or more
+	// dotted qualifiers, outermost first — e.g. "G.SUB.MEMBER") descends the field
+	// tree from GROUP to disambiguate a MEMBER that recurs across several DCLGEN
+	// groups; field_map alone cannot, since it keys on bare sname (last wins).
+	// Returns nullptr if unresolved. On success *cobol_ref is what to emit as the
+	// COBOL reference: the qualified "MEMBER OF GROUP ..." for a dotted ref, or the
+	// name as written for a plain one (preserving the prior unqualified behaviour).
+	cb_field_ptr resolve_hostref(const std::string& ref, std::string& cobol_ref);
+
 	// A group host variable used with a null indicator pairs each decomposed
 	// leaf with one element of an indicator ARRAY (DB2 semantics). Validate the
 	// indicator exists and is an OCCURS table; returns it via *ind_field

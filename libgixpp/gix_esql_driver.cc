@@ -215,6 +215,22 @@ std::vector<cb_sql_token_t> *gix_esql_driver::cb_concat_text_list(std::vector<cb
 	return list;
 }
 
+void gix_esql_driver::cb_collect_group_leaves(cb_field_ptr f, std::vector<cb_field_ptr> &out)
+{
+	for (cb_field_ptr c = f->children; c; c = c->sister) {
+		CobolVarType ct = CobolVarType::UNKNOWN;
+		int cs = 0, csc = 0;
+		bool c_is_varlen = parser_data()->get_actual_field_data(c, &ct, &cs, &csc);
+		// Descend only into plain (non-varlen) nested groups; a varlen group
+		// (SQL VARYING / VARCHAR) is itself a single bindable item, as is any
+		// elementary field.
+		if (ct == CobolVarType::COBOL_TYPE_GROUP && !c_is_varlen && c->children)
+			cb_collect_group_leaves(c, out);
+		else
+			out.push_back(c);
+	}
+}
+
 std::string gix_esql_driver::cb_host_list_add(std::vector<cb_hostreference_ptr> *list, std::string text)
 {
 	// Handle placeholders for group items passed as host variables
@@ -225,14 +241,20 @@ std::string gix_esql_driver::cb_host_list_add(std::vector<cb_hostreference_ptr> 
 		cb_field_ptr f = parser_data()->field_map(text.substr(1));
 		bool is_varlen = parser_data()->get_actual_field_data(f, &f_type, &f_size, &f_scale);
 
-		if ((this->commandname == "INSERT" || this->commandname == "SELECT") && 
+		if ((this->commandname == "INSERT" || this->commandname == "SELECT") &&
 				f_type == CobolVarType::COBOL_TYPE_GROUP && !is_varlen) {
-			cb_field_ptr c = f->children;
+			// Decompose the group into its leaves and emit one placeholder each.
+			// Reference each leaf with the qualified DB2 host-ref syntax
+			// ":GROUP.LEAF" (resolved by TPESQLProcessor::resolve_hostref into
+			// "LEAF OF GROUP ..."). A bare ":LEAF" would be ambiguous whenever the
+			// same column name recurs across DCLGEN groups, which
+			// is exactly the case for whole-group inserts like "VALUES (:group)".
+			std::vector<cb_field_ptr> leaves;
+			cb_collect_group_leaves(f, leaves);
 			std::string s;
-			while (c) {
-				s += cb_host_list_add(list, ":" + c->sname);
-				c = c->sister;
-				if (c) s += ",";
+			for (size_t i = 0; i < leaves.size(); ++i) {
+				if (i) s += ",";
+				s += cb_host_list_add(list, ":" + f->sname + "." + leaves[i]->sname);
 			}
 			return "@[" + s + "]";
 		}
