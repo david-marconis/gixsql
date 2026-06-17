@@ -1230,7 +1230,12 @@ SUBSYSTEM "SQL"|"CICS"|"DLI"
 
 
    /* was: ("66"|"77"|"78"|"88")[^\.]*"." {} */
-    ("66"|"88")[^\.]*"." {} 
+   /* Skip level-66/88 entries. The terminator is the first period that is NOT
+      inside a quoted literal: a VALUE literal may itself contain '.' (e.g. a
+      cursor-switch byte `VALUE '.'` or `VALUE '.A.........'`). A bare [^.]*
+      stops at that inner period and leaks the rest of the literal as stray
+      WORD/PERIOD tokens, so step over quoted strings explicitly. */
+    ("66"|"88")([^.'\"]|'[^']*'|"\""[^\"]*"\"")*"." {}
 
     "OBJECT-STORAGE"[ ]+"SECTION"[ ]*"." |
     "COMMUNICATION"[ ]+"SECTION"[ ]*"." |
