@@ -799,6 +799,16 @@ SUBSYSTEM "SQL"|"CICS"|"DLI"
 	}
 }
 
+"COPY"[ \r\n]+({INCFILE})[ \r\n]+"REPLACING"[^.]*"." {
+	// gixpp does not expand a plain COPY itself (cobc does, from the output
+	// line, which is preserved verbatim). The plain-COPY rule below only
+	// matches "COPY name." — a REPLACING clause is not matched, so without
+	// this rule its tokens (COPY, name, REPLACING, BY, operands) would leak to
+	// the parser as stray words and break it ("syntax error, unexpected WORD").
+	// Skip the whole COPY ... REPLACING ... statement, mirroring how the plain
+	// form is dropped from the token stream when -p is not in effect.
+}
+
 "COPY"[ ]+({INCFILE})[ ]*"." {
 
     if (driver->parser_data()->job_params()->opt_preprocess_copy_files) {
