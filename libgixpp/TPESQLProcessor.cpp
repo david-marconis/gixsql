@@ -1674,6 +1674,16 @@ void TPESQLProcessor::process_sql_query_list()
 			sql = string_replace_regex(sql, "[\\r]", "");
 			sql = string_replace_regex(sql, "[\\n\\t]", " ");
 			ws_query_list.push_back(sql);
+			// Bind the statement's query id to its actual position in
+			// ws_query_list. put_query_defs() emits the SQ%04d constants by this
+			// sequential position, but statements otherwise carry the global
+			// `sqlnum` counter, which can drift ahead of the list (e.g. a query
+			// statement whose token list ended up empty bumps sqlnum without
+			// adding an entry). When it drifts, ws_query_list.at(id-1) reads out
+			// of range (gixpp aborts with std::out_of_range) and the emitted
+			// SQ name no longer matches. Re-deriving the id here keeps the
+			// reference and the definition in lockstep for every program.
+			p->sql_query_list_id = (int)ws_query_list.size();
 		}
 	}
 }
