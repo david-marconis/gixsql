@@ -23,6 +23,66 @@ USA.
 
 #define LINE_PREFIX			 "GIXSQL     "
 
+// Fixed-format COBOL code must end by column 72; cobc silently drops anything
+// past it. A long CALL argument (e.g. a fully-qualified, subscripted host
+// reference) overflows and
+// loses its tail, producing a spurious "unexpected END-CALL". Split such a line
+// at whitespace onto continuation lines, all kept in Area B. Breaks are taken
+// only at spaces OUTSIDE quoted literals, so neither a literal nor a word token
+// is ever broken (no hyphen continuation needed).
+#define COBOL_CODE_COL_LIMIT 72
+
+static std::vector<std::string> split_ws_quote_aware(const std::string &s)
+{
+	std::vector<std::string> toks;
+	std::string cur;
+	bool in_quote = false;
+	for (size_t i = 0; i < s.length(); ++i) {
+		char c = s[i];
+		if (c == '"')
+			in_quote = !in_quote;
+		if (c == ' ' && !in_quote) {
+			if (!cur.empty()) {
+				toks.push_back(cur);
+				cur.clear();
+			}
+		}
+		else
+			cur += c;
+	}
+	if (!cur.empty())
+		toks.push_back(cur);
+	return toks;
+}
+
+// Append `head + value` to res, wrapping at quote-safe whitespace if it would
+// exceed the column limit. `cont_prefix` begins each continuation line (in Area B).
+static void push_call_line(std::vector<std::string> &res, const std::string &head,
+	const std::string &value, const std::string &cont_prefix)
+{
+	if ((head + value).length() <= COBOL_CODE_COL_LIMIT) {
+		res.push_back(head + value);
+		return;
+	}
+
+	std::vector<std::string> toks = split_ws_quote_aware(value);
+	std::string line = head;
+	size_t on_line = 0;
+	for (const std::string &t : toks) {
+		std::string candidate = line + (on_line ? " " : "") + t;
+		if (on_line > 0 && candidate.length() > COBOL_CODE_COL_LIMIT) {
+			res.push_back(line);
+			line = cont_prefix + t;
+			on_line = 1;
+		}
+		else {
+			line = candidate;
+			on_line++;
+		}
+	}
+	res.push_back(line);
+}
+
 ESQLCall::ESQLCall(const std::string _call_name, bool _is_static)
 {
 	call_name = _call_name;
@@ -94,7 +154,9 @@ std::vector<std::string> ESQLCall::format(int indent_level) const
 	res.push_back(lp + string_format(indent + "CALL %s\"%s\"", (is_static ? "STATIC " : ""), call_name) + (params.size() ? " USING" : ""));
 	
 	for (auto p : params) {
-		res.push_back(lp + string_format(indent + "    BY %s %s", (p.by_reference ? "REFERENCE" : "VALUE"), p.value));
+		std::string head = lp + string_format(indent + "    BY %s ", (p.by_reference ? "REFERENCE" : "VALUE"));
+		std::string cont_prefix = lp + indent + "        ";
+		push_call_line(res, head, p.value, cont_prefix);
 	}
 
 	res.push_back(lp + indent + std::string("END-CALL"));
