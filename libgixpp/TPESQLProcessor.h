@@ -134,6 +134,14 @@ private:
 	bool put_res_host_parameters(const cb_exec_sql_stmt_ptr stmt, int *res_params_count);
 	bool put_host_parameters(const cb_exec_sql_stmt_ptr stmt);
 
+	// Flatten a group host variable into its elementary leaf fields, in
+	// declaration order, descending through nested (non-varlen) subgroups.
+	void collect_group_leaves(cb_field_ptr f, std::vector<cb_field_ptr>& out);
+
+	// Fully-qualified COBOL reference ("LEAF OF PARENT OF ... OF ROOT") so a
+	// decomposed group leaf is unambiguous when the same name recurs elsewhere.
+	std::string field_qualified_name(cb_field_ptr f);
+
 	void add_preprocessed_blocks();
 	bool decode_indicator(const std::string& orig_name, std::string& var_name, std::string& ind_name);
 

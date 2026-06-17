@@ -984,18 +984,14 @@ bool TPESQLProcessor::handle_esql_stmt(const ESQL_Command cmd, const cb_exec_sql
 					return false;
 				}
 
-				if (hr->group_levels_count != 1) {
-					raise_error("Nested levels not allowed in group variable: " + rp->hostreference.substr(1), ERR_MISSING_HOSTVAR, stmt->src_abs_path, rp->lineno);
-					return false;
-				}
-
-				cb_field_ptr pp = hr->children;
-				if (!pp) {
+				std::vector<cb_field_ptr> leaves;
+				collect_group_leaves(hr, leaves);
+				if (leaves.empty()) {
 					raise_error("Inconsistent data for group field : " + hr->sname, ERR_MISSING_HOSTVAR, stmt->src_abs_path, rp->lineno);
 					return false;
 				}
 
-				while (pp) {
+				for (cb_field_ptr pp : leaves) {
 
 					ESQLCall pp_call(get_call_id("SetResultParams"), emit_static);
 					int pp_flags = (pp->usage == Usage::Binary) ? CBL_FIELD_FLAG_BINARY : CBL_FIELD_FLAG_NONE;
@@ -1003,24 +999,20 @@ bool TPESQLProcessor::handle_esql_stmt(const ESQL_Command cmd, const cb_exec_sql
 					CobolVarType pp_type = CobolVarType::UNKNOWN;
 					int pp_size = 0, pp_scale = 0;
 					bool pp_is_varlen = parser_data->get_actual_field_data(pp, &pp_type, &pp_size, &pp_scale);
-					if (pp_is_varlen) {
-						raise_error("Inconsistent data for group field member: " + pp->sname, ERR_MISSING_HOSTVAR, stmt->src_abs_path, rp->lineno);
-						return false;
-					}
+					if (pp_is_varlen)
+						pp_flags |= CBL_FIELD_FLAG_VARLEN;
 
 					pp_call.addParameter(pp_type, BY_VALUE);
 					pp_call.addParameter(pp_size, BY_VALUE);
 					pp_call.addParameter(pp_scale > 0 ? -pp_scale : 0, BY_VALUE);
 					pp_call.addParameter(pp_flags, BY_VALUE);
-					pp_call.addParameter(pp->sname, BY_REFERENCE);
+					pp_call.addParameter(field_qualified_name(pp), BY_REFERENCE);
 					pp_call.addParameter(0, BY_REFERENCE);
 
 					if (!put_call(pp_call, false))
 						return false;
 
 					res_params_count++;
-
-					pp = pp->sister;
 				}
 
 			}
@@ -1138,18 +1130,14 @@ bool TPESQLProcessor::handle_esql_stmt(const ESQL_Command cmd, const cb_exec_sql
 					return false;
 				}
 
-				if (hr->group_levels_count != 1) {
-					raise_error("Nested levels not allowed in group variable: " + var_name, ERR_MISSING_HOSTVAR, stmt->src_abs_path, p->lineno);
-					return false;
-				}
-
-				cb_field_ptr pp = hr->children;
-				if (!pp) {
+				std::vector<cb_field_ptr> leaves;
+				collect_group_leaves(hr, leaves);
+				if (leaves.empty()) {
 					raise_error("Inconsistent data for group field : " + hr->sname, ERR_MISSING_HOSTVAR, stmt->src_abs_path, p->lineno);
 					return false;
 				}
 
-				while (pp) {
+				for (cb_field_ptr pp : leaves) {
 
 					ESQLCall pp_call(get_call_id("SetSQLParams"), emit_static);
 					int pp_flags = (pp->usage == Usage::Binary) ? CBL_FIELD_FLAG_BINARY : CBL_FIELD_FLAG_NONE;
@@ -1164,25 +1152,21 @@ bool TPESQLProcessor::handle_esql_stmt(const ESQL_Command cmd, const cb_exec_sql
 					CobolVarType pp_type = CobolVarType::UNKNOWN;
 					int pp_size = 0, pp_scale = 0;
 					bool pp_is_varlen = parser_data->get_actual_field_data(pp, &pp_type, &pp_size, &pp_scale);
-					if (pp_is_varlen) {
-						raise_error("Inconsistent data for group field member: " + pp->sname, ERR_MISSING_HOSTVAR, stmt->src_abs_path, p->lineno);
-						return false;
-					}
+					if (pp_is_varlen)
+						pp_flags |= CBL_FIELD_FLAG_VARLEN;
 
 					pp_call.addParameter(pp_type, BY_VALUE);
 					pp_call.addParameter(pp_size, BY_VALUE);
 					pp_call.addParameter(pp_scale > 0 ? -pp_scale : 0, BY_VALUE);
 					pp_call.addParameter(pp_flags, BY_VALUE);
 
-					pp_call.addParameter(pp->sname, BY_REFERENCE);
+					pp_call.addParameter(field_qualified_name(pp), BY_REFERENCE);
 					pp_call.addParameter(0, BY_VALUE);
 
 					if (!put_call(pp_call, false))
 						return false;
 
 					sql_params_count++;
-
-					pp = pp->sister;
 				}
 
 			}
@@ -2022,6 +2006,30 @@ void TPESQLProcessor::put_smart_cursor_init_check(const std::string& crsr_name, 
 	put_output_line(string_format(AREA_B_CPREFIX "END-IF"));
 }
 
+std::string TPESQLProcessor::field_qualified_name(cb_field_ptr f)
+{
+	std::string n = f->sname;
+	for (cb_field_ptr p = f->parent; p; p = p->parent)
+		n += " OF " + p->sname;
+	return n;
+}
+
+void TPESQLProcessor::collect_group_leaves(cb_field_ptr f, std::vector<cb_field_ptr>& out)
+{
+	for (cb_field_ptr c = f->children; c; c = c->sister) {
+		CobolVarType ct = CobolVarType::UNKNOWN;
+		int cs = 0, csc = 0;
+		bool c_is_varlen = parser_data->get_actual_field_data(c, &ct, &cs, &csc);
+		// Descend only into plain (non-varlen) nested groups; a varlen group
+		// (SQL VARYING / VARCHAR) is itself a single bindable item, as is any
+		// elementary field.
+		if (ct == CobolVarType::COBOL_TYPE_GROUP && !c_is_varlen && c->children)
+			collect_group_leaves(c, out);
+		else
+			out.push_back(c);
+	}
+}
+
 bool TPESQLProcessor::put_res_host_parameters(const cb_exec_sql_stmt_ptr stmt, int* res_params_count)
 {
 	int rp_count = 0;
@@ -2051,18 +2059,14 @@ bool TPESQLProcessor::put_res_host_parameters(const cb_exec_sql_stmt_ptr stmt, i
 				return false;
 			}
 
-			if (hr->group_levels_count != 1) {
-				raise_error("Nested levels not allowed in group variable: " + var_name, ERR_MISSING_HOSTVAR, stmt->src_abs_path, rp->lineno);
-				return false;
-			}
-
-			cb_field_ptr pp = hr->children;
-			if (!pp) {
+			std::vector<cb_field_ptr> leaves;
+			collect_group_leaves(hr, leaves);
+			if (leaves.empty()) {
 				raise_error("Inconsistent data for group field : " + hr->sname, ERR_MISSING_HOSTVAR, stmt->src_abs_path, rp->lineno);
 				return false;
 			}
 
-			while (pp) {
+			for (cb_field_ptr pp : leaves) {
 
 				ESQLCall pp_call(get_call_id("SetResultParams"), emit_static);
 				int pp_flags = (pp->usage == Usage::Binary) ? CBL_FIELD_FLAG_BINARY : CBL_FIELD_FLAG_NONE;
@@ -2070,24 +2074,20 @@ bool TPESQLProcessor::put_res_host_parameters(const cb_exec_sql_stmt_ptr stmt, i
 				CobolVarType pp_type = CobolVarType::UNKNOWN;
 				int pp_size = 0, pp_scale = 0;
 				bool pp_is_varlen = parser_data->get_actual_field_data(pp, &pp_type, &pp_size, &pp_scale);
-				if (pp_is_varlen) {
-					raise_error("Inconsistent data for group field member: " + pp->sname, ERR_MISSING_HOSTVAR, stmt->src_abs_path, rp->lineno);
-					return false;
-				}
+				if (pp_is_varlen)
+					pp_flags |= CBL_FIELD_FLAG_VARLEN;
 
 				pp_call.addParameter(pp_type, BY_VALUE);
 				pp_call.addParameter(pp_size, BY_VALUE);
 				pp_call.addParameter(pp_scale > 0 ? -pp_scale : 0, BY_VALUE);
 				pp_call.addParameter(pp_flags, BY_VALUE);
-				pp_call.addParameter(pp->sname, BY_REFERENCE);
+				pp_call.addParameter(field_qualified_name(pp), BY_REFERENCE);
 				pp_call.addParameter(0, BY_REFERENCE);
 
 				if (!put_call(pp_call, false))
 					return false;
 
 				rp_count++;
-
-				pp = pp->sister;
 			}
 
 		}
