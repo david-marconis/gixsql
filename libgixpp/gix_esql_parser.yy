@@ -418,6 +418,18 @@ EXECSQL CONNECT TO strliteral_or_hostref opt_connect_as USER strliteral_or_hostr
 	driver->conninfo->data_source = $4;
 	driver->put_exec_list();
 }
+// mode 6: EXEC SQL CONNECT TO :db_data_source [ AS :db_conn_id ]
+// Implicit-credentials form (no USER / USING): the data source itself carries
+// the authentication. Common where the data source itself names the server.
+| EXECSQL CONNECT TO strliteral_or_hostref opt_connect_as END_EXEC {
+	driver->conninfo = new esql_connection_info_t();
+	driver->conninfo->id = $5;
+	driver->conninfo->data_source = $4;
+	driver->conninfo->username = new hostref_or_literal_t();
+	driver->conninfo->password = new hostref_or_literal_t();
+	driver->conninfo->dbname = new hostref_or_literal_t();
+	driver->put_exec_list();
+}
 ;
 
 opt_auth_info:
