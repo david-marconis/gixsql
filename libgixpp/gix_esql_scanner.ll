@@ -163,14 +163,13 @@ SUBSYSTEM "SQL"|"CICS"|"DLI"
 		return yy::gix_esql_parser::make_EXECSQL(loc);	
 	}
 	else {
-		if (subsystem == "CICS") {
-			return yy::gix_esql_parser::make_TOKEN(subsystem, loc);	
-		}
-		else {
-			if (subsystem == "DLI") {
-				return yy::gix_esql_parser::make_TOKEN(subsystem, loc);	
-			}
-		}
+		// EXEC CICS / EXEC DLI are not EXEC SQL: gixpp does not transform them.
+		// Returning a token here injects a stray TOKEN at the top level that no
+		// grammar rule accepts ("syntax error, unexpected TOKEN") — the rest of
+		// the block (and its END-EXEC) is already swallowed by the catch-all.
+		// Emit nothing and let the block pass through untouched; its source
+		// lines are copied to the output verbatim like any non-SQL statement.
+		(void) subsystem;
 	}
 
 }
