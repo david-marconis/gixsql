@@ -1038,7 +1038,7 @@ flag_separate:
 ;
 
 occurs_clause:
-OCCURS NUMERIC occurs_numeric_data occurs_sort_opts
+OCCURS NUMERIC occurs_numeric_data occurs_sort_opts { driver->current_field->occurs = (int)$2; }
 | OCCURS UNBOUNDED occurs_unbounded_data occurs_sort_opts
 ;
 

@@ -979,11 +979,6 @@ bool TPESQLProcessor::handle_esql_stmt(const ESQL_Command cmd, const cb_exec_sql
 			// They are decomposed into their sub-elements
 			if (f_type == CobolVarType::COBOL_TYPE_GROUP && !is_varlen) {
 
-				if (has_indicator) {
-					raise_error("Invalid null indicator reference: " + rp->hostreference.substr(1), ERR_INVALID_NULLIND_REF, stmt->src_abs_path, rp->lineno);
-					return false;
-				}
-
 				std::vector<cb_field_ptr> leaves;
 				collect_group_leaves(hr, leaves);
 				if (leaves.empty()) {
@@ -991,7 +986,14 @@ bool TPESQLProcessor::handle_esql_stmt(const ESQL_Command cmd, const cb_exec_sql
 					return false;
 				}
 
+				cb_field_ptr ind_field = nullptr;
+				if (!validate_group_indicator(has_indicator, ind_name, rp->hostreference.substr(1),
+						stmt->src_abs_path, rp->lineno, &ind_field))
+					return false;
+
+				int leaf_idx = 0;
 				for (cb_field_ptr pp : leaves) {
+					++leaf_idx;
 
 					ESQLCall pp_call(get_call_id("SetResultParams"), emit_static);
 					int pp_flags = (pp->usage == Usage::Binary) ? CBL_FIELD_FLAG_BINARY : CBL_FIELD_FLAG_NONE;
@@ -1007,7 +1009,7 @@ bool TPESQLProcessor::handle_esql_stmt(const ESQL_Command cmd, const cb_exec_sql
 					pp_call.addParameter(pp_scale > 0 ? -pp_scale : 0, BY_VALUE);
 					pp_call.addParameter(pp_flags, BY_VALUE);
 					pp_call.addParameter(field_qualified_name(pp), BY_REFERENCE);
-					pp_call.addParameter(0, BY_REFERENCE);
+					add_leaf_indicator(pp_call, has_indicator, ind_field, leaf_idx, false);
 
 					if (!put_call(pp_call, false))
 						return false;
@@ -1125,11 +1127,6 @@ bool TPESQLProcessor::handle_esql_stmt(const ESQL_Command cmd, const cb_exec_sql
 			// They are decomposed into their sub-elements
 			if (cmd == ESQL_Command::Insert && f_type == CobolVarType::COBOL_TYPE_GROUP && !is_varlen) {
 
-				if (has_indicator) {
-					raise_error("Invalid null indicator reference: " + var_name, ERR_INVALID_NULLIND_REF, stmt->src_abs_path, p->lineno);
-					return false;
-				}
-
 				std::vector<cb_field_ptr> leaves;
 				collect_group_leaves(hr, leaves);
 				if (leaves.empty()) {
@@ -1137,7 +1134,14 @@ bool TPESQLProcessor::handle_esql_stmt(const ESQL_Command cmd, const cb_exec_sql
 					return false;
 				}
 
+				cb_field_ptr ind_field = nullptr;
+				if (!validate_group_indicator(has_indicator, ind_name, p->hostreference.substr(1),
+						stmt->src_abs_path, p->lineno, &ind_field))
+					return false;
+
+				int leaf_idx = 0;
 				for (cb_field_ptr pp : leaves) {
+					++leaf_idx;
 
 					ESQLCall pp_call(get_call_id("SetSQLParams"), emit_static);
 					int pp_flags = (pp->usage == Usage::Binary) ? CBL_FIELD_FLAG_BINARY : CBL_FIELD_FLAG_NONE;
@@ -1161,7 +1165,7 @@ bool TPESQLProcessor::handle_esql_stmt(const ESQL_Command cmd, const cb_exec_sql
 					pp_call.addParameter(pp_flags, BY_VALUE);
 
 					pp_call.addParameter(field_qualified_name(pp), BY_REFERENCE);
-					pp_call.addParameter(0, BY_VALUE);
+					add_leaf_indicator(pp_call, has_indicator, ind_field, leaf_idx, true);
 
 					if (!put_call(pp_call, false))
 						return false;
@@ -2019,8 +2023,14 @@ void TPESQLProcessor::put_smart_cursor_init_check(const std::string& crsr_name, 
 std::string TPESQLProcessor::field_qualified_name(cb_field_ptr f)
 {
 	std::string n = f->sname;
-	for (cb_field_ptr p = f->parent; p; p = p->parent)
+	for (cb_field_ptr p = f->parent; p; p = p->parent) {
+		// FILLER has no addressable name; COBOL qualification may skip
+		// intermediate levels, so drop FILLER ancestors (e.g. an indicator
+		// array nested inside an unnamed "01 FILLER." working-storage group).
+		if (to_upper(p->sname) == "FILLER")
+			continue;
 		n += " OF " + p->sname;
+	}
 	return n;
 }
 
@@ -2038,6 +2048,41 @@ void TPESQLProcessor::collect_group_leaves(cb_field_ptr f, std::vector<cb_field_
 		else
 			out.push_back(c);
 	}
+}
+
+bool TPESQLProcessor::validate_group_indicator(bool has_indicator, const std::string& ind_name,
+	const std::string& full_ref, const std::string& src, int lineno, cb_field_ptr* ind_field)
+{
+	*ind_field = nullptr;
+	if (!has_indicator)
+		return true;
+	if (!parser_data->field_exists(ind_name)) {
+		raise_error("Cannot find host variable: " + ind_name, ERR_MISSING_HOSTVAR, src, lineno);
+		return false;
+	}
+	cb_field_ptr f = parser_data->field_map(ind_name);
+	// DB2 pairs the Nth group leaf with the Nth indicator-array element, so the
+	// indicator must be an OCCURS table. A scalar indicator on a group cannot be
+	// mapped to per-column indicators, so reject it. An array that is *smaller*
+	// than the group is allowed: DB2 supplies indicators for the leading columns
+	// only, which add_leaf_indicator() reproduces.
+	if (f->occurs <= 0) {
+		raise_error("Invalid null indicator reference: " + full_ref, ERR_INVALID_NULLIND_REF, src, lineno);
+		return false;
+	}
+	*ind_field = f;
+	return true;
+}
+
+void TPESQLProcessor::add_leaf_indicator(ESQLCall& call, bool has_indicator,
+	cb_field_ptr ind_field, int leaf_idx, bool by_value_null)
+{
+	if (has_indicator && leaf_idx <= ind_field->occurs)
+		call.addParameter(field_qualified_name(ind_field) + " (" + std::to_string(leaf_idx) + ")", BY_REFERENCE);
+	else if (by_value_null)
+		call.addParameter(0, BY_VALUE);
+	else
+		call.addParameter(0, BY_REFERENCE);
 }
 
 bool TPESQLProcessor::put_res_host_parameters(const cb_exec_sql_stmt_ptr stmt, int* res_params_count)
@@ -2064,11 +2109,6 @@ bool TPESQLProcessor::put_res_host_parameters(const cb_exec_sql_stmt_ptr stmt, i
 		// They are decomposed into their sub-elements
 		if (f_type == CobolVarType::COBOL_TYPE_GROUP && !is_varlen) {
 
-			if (has_indicator) {
-				raise_error("Invalid null indicator reference: " + rp->hostreference.substr(1), ERR_INVALID_NULLIND_REF, stmt->src_abs_path, rp->lineno);
-				return false;
-			}
-
 			std::vector<cb_field_ptr> leaves;
 			collect_group_leaves(hr, leaves);
 			if (leaves.empty()) {
@@ -2076,7 +2116,14 @@ bool TPESQLProcessor::put_res_host_parameters(const cb_exec_sql_stmt_ptr stmt, i
 				return false;
 			}
 
+			cb_field_ptr ind_field = nullptr;
+			if (!validate_group_indicator(has_indicator, ind_name, rp->hostreference.substr(1),
+					stmt->src_abs_path, rp->lineno, &ind_field))
+				return false;
+
+			int leaf_idx = 0;
 			for (cb_field_ptr pp : leaves) {
+				++leaf_idx;
 
 				ESQLCall pp_call(get_call_id("SetResultParams"), emit_static);
 				int pp_flags = (pp->usage == Usage::Binary) ? CBL_FIELD_FLAG_BINARY : CBL_FIELD_FLAG_NONE;
@@ -2092,7 +2139,7 @@ bool TPESQLProcessor::put_res_host_parameters(const cb_exec_sql_stmt_ptr stmt, i
 				pp_call.addParameter(pp_scale > 0 ? -pp_scale : 0, BY_VALUE);
 				pp_call.addParameter(pp_flags, BY_VALUE);
 				pp_call.addParameter(field_qualified_name(pp), BY_REFERENCE);
-				pp_call.addParameter(0, BY_REFERENCE);
+				add_leaf_indicator(pp_call, has_indicator, ind_field, leaf_idx, false);
 
 				if (!put_call(pp_call, false))
 					return false;

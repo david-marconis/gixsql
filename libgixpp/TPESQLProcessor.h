@@ -142,6 +142,23 @@ private:
 	// decomposed group leaf is unambiguous when the same name recurs elsewhere.
 	std::string field_qualified_name(cb_field_ptr f);
 
+	// A group host variable used with a null indicator pairs each decomposed
+	// leaf with one element of an indicator ARRAY (DB2 semantics). Validate the
+	// indicator exists and is an OCCURS table; returns it via *ind_field
+	// (nullptr when has_indicator is false), or raises and returns false on a
+	// missing indicator or a scalar (non-array) one.
+	bool validate_group_indicator(bool has_indicator, const std::string& ind_name,
+		const std::string& full_ref, const std::string& src, int lineno,
+		cb_field_ptr* ind_field);
+
+	// Append the trailing null-indicator argument for one decomposed group leaf
+	// (1-based leaf_idx): the indicator-array element when leaf_idx is within the
+	// array, otherwise the site's original null placeholder (BY VALUE 0 vs BY
+	// REFERENCE 0). An indicator array smaller than the group is allowed (DB2
+	// supplies indicators only for the leading columns); the rest get no indicator.
+	void add_leaf_indicator(ESQLCall& call, bool has_indicator,
+		cb_field_ptr ind_field, int leaf_idx, bool by_value_null);
+
 	void add_preprocessed_blocks();
 	bool decode_indicator(const std::string& orig_name, std::string& var_name, std::string& ind_name);
 
