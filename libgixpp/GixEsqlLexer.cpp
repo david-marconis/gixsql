@@ -77,6 +77,14 @@ int GixEsqlLexer::LexerInput(char* buff, int max_size)
 			{
 				if (is_continued_line(buff, &is_continuing, partial_line)) {
 					partial_line = string_replace(partial_line, SYS_EOL, "");
+					// This physical line is folded into the continued literal and
+					// returned later as part of a single merged buffer carrying one
+					// EOL, so flex would otherwise count one newline for several
+					// source lines. Account for the swallowed line so yylineno (which
+					// drives the EXEC SQL statement line ranges) stays in step with
+					// the source — otherwise later statements' END-EXEC/host-var
+					// lines drift and land on the wrong source line.
+					yylineno++;
 					continue;
 				}
 			}
@@ -95,8 +103,12 @@ int GixEsqlLexer::LexerInput(char* buff, int max_size)
 						strcat(buff, SYS_EOL);
 						return strlen(buff);
 					}
-					else
+					else {
+						// Another continuation line folded into the literal: same
+						// newline-accounting fix as above (see the ' ' case).
+						yylineno++;
 						continue;
+					}
 				}
 				else
 					return 0;		// ERROR
