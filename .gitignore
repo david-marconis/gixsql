@@ -25,3 +25,18 @@ config.h
 /deploy/checklist.txt
 /redist/msvc/x86
 /redist/msvcrt/x86
+
+# Autotools / configure / make / dist-packaging build artifacts
+Makefile
+libtool
+stamp-h1
+*~
+autom4te.cache/
+.dirstamp
+/install/
+/version
+/README
+/extra_files.mk
+/doc/
+/examples/
+gixpp/gixpp
