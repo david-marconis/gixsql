@@ -197,6 +197,7 @@ private:
 
 	bool emitted_query_defs = false;
 	bool emitted_smart_cursor_init_flags = false;
+	bool source_uses_sql_init_flag = false;
 
 	std::shared_ptr<ESQLParserData> parser_data;
 

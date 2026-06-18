@@ -312,6 +312,20 @@ bool TPESQLProcessor::processNextFile()
 	std::string the_file = input_file_stack.top();
 	std::vector<std::string> input_lines = file_read_all_lines(the_file);
 
+	// The IBM Db2 precompiler emits a working-storage symbol SQL-INIT-FLAG, which
+	// code written for it may reset (MOVE 0 TO SQL-INIT-FLAG) to force cursor
+	// re-initialization. GixSQL drives re-init through its own GIXSQL-CI-* flags
+	// instead, so it never defines SQL-INIT-FLAG, and such a source fails cobc with
+	// "'SQL-INIT-FLAG' is not defined". When the source references it, emit a
+	// compatibility definition alongside the cursor-init flags (see
+	// put_smart_cursor_init_flags).
+	for (const std::string& l : input_lines) {
+		if (l.length() > 6 && l[6] != '*' && to_upper(l).find("SQL-INIT-FLAG") != std::string::npos) {
+			source_uses_sql_init_flag = true;
+			break;
+		}
+	}
+
 #if defined(_WIN32) && defined(_DEBUG) && defined(VERBOSE)
 	char bfr[512];
 	sprintf(bfr, "Processing file %s\n", the_file.c_str());
@@ -1999,6 +2013,13 @@ void TPESQLProcessor::put_smart_cursor_init_flags()
 		std::string cname = string_replace(stmt->cursorName, "_", "-");
 		put_output_line(code_tag + string_format(" 01  GIXSQL-CI-F-%s PIC X.", cname));
 	}
+	// IBM Db2-compatibility: code written for the Db2 precompiler may reset its
+	// SQL-INIT-FLAG (MOVE 0 TO SQL-INIT-FLAG) to force cursor re-init. GixSQL uses
+	// its own GIXSQL-CI-* flags, so the symbol is otherwise undefined; emit a
+	// definition so the (now harmless) reset compiles.
+	if (source_uses_sql_init_flag)
+		put_output_line(code_tag + std::string(" 01  SQL-INIT-FLAG PIC S9(4) COMP-5 VALUE +0."));
+
 	put_output_line(code_tag + "*   ESQL CURSOR INIT FLAGS (END)");
 
 	emitted_smart_cursor_init_flags = true;
