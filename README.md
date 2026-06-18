@@ -1,3 +1,42 @@
+# GixSQL (fork)
+
+This is a fork of [GixSQL](https://github.com/mridoni/gixsql) by Marco Ridoni. Upstream has not been maintained for a while (see [issue #203](https://github.com/mridoni/gixsql/issues/203)), so this fork collects fixes to the `gixpp` preprocessor and the `libgixsql` runtime that were needed to compile and run mainframe COBOL with embedded `EXEC SQL` against Db2 (via ODBC) and SQLite on Linux.
+
+The fork keeps the same license as upstream (GPL-3.0). Contributions are welcome; feel free to open issues or pull requests. The original upstream README follows below, unchanged.
+
+## What this fork changes
+
+Each change is its own commit on top of upstream, and each commit message explains the problem and the fix. The changes are:
+
+**Preprocessor (`gixpp` / `libgixpp`)**
+
+- **Case-insensitivity**: SQL keywords, host-variable resolution and `COPY` file resolution are matched case-insensitively. COBOL identifiers and SQL keywords are case-insensitive, but the original preprocessor compared them case-sensitively (and resolved `COPY` members against a case-sensitive filesystem), so valid mixed-case COBOL failed to preprocess.
+- **Group host variables**: recursively decompose nested group host variables into their elementary fields, resolve qualified `:group.member` host references, and support null-indicator arrays paired with the fields of a group host variable.
+- **Scanner robustness**: tolerate whitespace or a newline between a host-variable colon and its name; skip `COPY ... REPLACING` statements and dotted literals in level-66/88 entries; pass `EXEC CICS` and `EXEC DLI` blocks through untouched; and harvest host variables from plain `COPY` copybooks in the DATA DIVISION.
+- **Grammar additions**: accept `CONNECT TO :host` without a `USER` clause, and parse the Db2 `RELEASE` statement.
+- **Code generation**: emit the smart cursor-init block before a trailing `END PROGRAM`; wrap over-long generated `CALL` argument lines at column 72; keep `yylineno` in step across COBOL literal continuation lines; bind each query id to its `ws_query_list` position (fixes a `std::out_of_range` abort); and define an IBM Db2-compatible `SQL-INIT-FLAG` symbol when the source uses it.
+- **Build fixes**: add `#include <cstdint>` where current compilers need it.
+
+**Runtime (`libgixsql`)**
+
+- Fix the binding of `USAGE COMP` (binary) numeric host variables so every backend sends them as text instead of raw binary, which Db2/ODBC rejected and SQLite mis-bound. Adds a regression test, `TSQL044A`.
+
+## Building this fork
+
+Some changes are in the flex scanner (`gix_esql_scanner.ll`) and bison grammar (`gix_esql_parser.yy`). The generated scanner and parser are not tracked, so regenerate them before building:
+
+```sh
+cd libgixpp
+flex -c++ -o gix_esql_scanner.cc gix_esql_scanner.ll
+bison -d -o gix_esql_parser.cc gix_esql_parser.yy
+cd ..
+./configure && make
+```
+
+The rest of the build is the same as upstream.
+
+---
+
 ## GixSQL
 
 GixSQL is an ESQL preprocessor and a set of runtime libraries that allow GnuCOBOL or sufficiently compatible enough COBOL implementations to access PostgreSQL, ODBC, MySQL, Oracle and SQLite databases.
