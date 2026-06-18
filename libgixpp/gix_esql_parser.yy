@@ -93,6 +93,7 @@ static std::string to_std_string(connect_to_info_t *i) { if (i) { char buffer [3
 %token<std::string> INSERT
 %token<std::string> UPDATE
 %token<std::string> DISCONNECT
+%token RELEASE			"RELEASE"
 %token CONNECT_RESET		"CONNECT RESET"
 %token<std::string> DELETE
 %token<std::string> EXECUTE
@@ -228,6 +229,7 @@ sqlvariantstates
 | deletesql
 | updatesql
 | disconnectsql
+| releasesql
 | resetsql
 | othersql
 | declaresql
@@ -275,6 +277,32 @@ EXECSQL disconnect ALL opt_semicolon END_EXEC
 
 disconnect:
 DISCONNECT {$$ = driver->cb_text_list_add (NULL, $1);}
+
+/* Db2 RELEASE marks connection(s) for release at the next commit. GixSQL has no
+   distinct primitive, so map every form — RELEASE ALL [SQL], RELEASE CURRENT,
+   RELEASE <name>, RELEASE :host — onto the existing "disconnect all" path
+   (the scanner sets commandname = DISCONNECT). Without this, RELEASE reached the
+   parser as a bare word and ALL was rejected ("unexpected ALL, expecting END-EXEC"). */
+releasesql:
+EXECSQL RELEASE ALL release_all_tail END_EXEC	/* RELEASE ALL [SQL] */
+{
+	driver->connectionid = new hostref_or_literal_t("*", true);
+	driver->put_exec_list();
+}
+| EXECSQL RELEASE opt_dbid END_EXEC		/* RELEASE <conn-name> | RELEASE :host */
+{
+	driver->connectionid = $3;
+	driver->put_exec_list();
+}
+;
+
+/* Trailing words after RELEASE ALL — the optional "SQL" keyword (Db2's
+   RELEASE ALL SQL) and/or a stray semicolon. A self-contained nullable list,
+   so it never competes with opt_semicolon (which would reject "SQL"). */
+release_all_tail:
+%empty
+| release_all_tail TOKEN
+;
 
 deletesql:
 execsql_with_opt_at delete token_list END_EXEC

@@ -413,10 +413,18 @@ SUBSYSTEM "SQL"|"CICS"|"DLI"
 
      
 	"DISCONNECT" {
-		__yy_push_state(ESQL_STATE); 
+		__yy_push_state(ESQL_STATE);
 
-		driver->commandname = to_upper(yytext);		
+		driver->commandname = to_upper(yytext);
 		return yy::gix_esql_parser::make_DISCONNECT(yytext, loc);
+	}
+
+	"RELEASE" {
+		// Db2 RELEASE (mark connection(s) for release) — handled like DISCONNECT.
+		__yy_push_state(ESQL_STATE);
+
+		driver->commandname = "DISCONNECT";
+		return yy::gix_esql_parser::make_RELEASE(loc);
 	}
 
 	"UPDATE" {
