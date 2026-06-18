@@ -837,19 +837,34 @@ SUBSYSTEM "SQL"|"CICS"|"DLI"
 
 "COPY"[ ]+({INCFILE})[ ]*"." {
 
-    if (driver->parser_data()->job_params()->opt_preprocess_copy_files) {
+	// Emit a COPY token (resolved via the grammar's `incfile` rule, which scans
+	// the copybook during the parse pass) for copybooks pulled into a DATA
+	// DIVISION section, even when copy-file preprocessing is off. This lets host
+	// variables declared in a plain-COPY copybook — not just in EXEC SQL INCLUDE /
+	// DCLGEN members — be harvested into the field map, so a reference to
+	// such a variable resolves. The transform pass still emits the COPY
+	// statement verbatim (it inlines only when -p is set), so cobc keeps expanding
+	// the copybook as before; only field metadata is gathered here.
+	//
+	// Restricted to data-division sections on purpose: in the PROCEDURE DIVISION
+	// the scanner reads char-by-char, so "COPY" embedded in a name (e.g. the
+	// paragraph "D200-Les-Copy Section.") would spuriously match this rule and try
+	// to resolve a bogus copybook. Procedure-division COPY copies code, not host
+	// variables, so harvesting there is unnecessary anyway.
+	if (driver->parser_data()->job_params()->opt_preprocess_copy_files
+		|| driver->data_division_section != DD_SECTION_INITIAL) {
 		driver->startlineno = yylineno;
 		driver->endlineno = yylineno;
-		
-		driver->commandname = "INCFILE";		
-		
+
+		driver->commandname = "INCFILE";
+
 		int p = find_last_space(yytext);
 		if (p < 0)
 			p = 5;
-		
+
 		std::string tts = std::string(yytext).substr(p);
 		tts = string_chop(tts, 1);
-		
+
 		driver->incfilename = tts;
 
 		return yy::gix_esql_parser::make_COPY(loc);
@@ -1479,7 +1494,7 @@ SUBSYSTEM "SQL"|"CICS"|"DLI"
 
 
 <*>(\r\n|\n) {
-	
+
 }
 
 <*>[ \t]+ {
