@@ -593,10 +593,19 @@ int DbInterfaceODBC::cursor_declare(const std::shared_ptr<ICursor>& cursor)
 		return DBERR_DECLARE_CURSOR_FAILED;
 	}
 
-	int rc = SQLSetCursorName(wk_rs->statement, (SQLCHAR*)cursor->getName().c_str(), SQL_NTS);
-	lib_logger->debug(FMT_FILE_FUNC "ODBC: setting cursor name: [{}]", __FILE__, __func__, cursor->getName());
+	// GixSQL mangles cursor names as <PROGRAM>_<cobol-cursor-name>, so a COBOL
+	// cursor like CUR-1 becomes PROGNAME_CUR-1. DB2 (ODBC) rejects hyphens in a
+	// cursor name (SQLSetCursorName -> -99999), which fails the DECLARE. The name
+	// is only meaningful to the DBMS for positioned updates (WHERE CURRENT OF);
+	// for FETCH-ONLY cursors it is cosmetic. Sanitise '-' -> '_' for the DB2-facing
+	// name while GixSQL keeps the original name as its internal map key.
+	std::string db_cursor_name = cursor->getName();
+	for (char &nc : db_cursor_name)
+		if (nc == '-') nc = '_';
+	int rc = SQLSetCursorName(wk_rs->statement, (SQLCHAR*)db_cursor_name.c_str(), SQL_NTS);
+	lib_logger->debug(FMT_FILE_FUNC "ODBC: setting cursor name: [{}]", __FILE__, __func__, db_cursor_name);
 	if (odbcRetrieveError(rc, ErrorSource::Statement, wk_rs->statement) != SQL_SUCCESS) {
-		lib_logger->error("ODBC: Error while setting cursor name ({}) {}", last_rc, cursor->getName());
+		lib_logger->error("ODBC: Error while setting cursor name ({}) {}", last_rc, db_cursor_name);
 		return DBERR_DECLARE_CURSOR_FAILED;
 	}
 

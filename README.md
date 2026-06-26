@@ -20,6 +20,7 @@ Each change is its own commit on top of upstream, and each commit message explai
 **Runtime (`libgixsql`)**
 
 - Fix the binding of `USAGE COMP` (binary) numeric host variables so every backend sends them as text instead of raw binary, which Db2/ODBC rejected and SQLite mis-bound. Adds a regression test, `TSQL044A`.
+- Sanitise hyphens (`-` to `_`) in the DB2-facing cursor name in the ODBC driver. GixSQL mangles cursor names as `<PROGRAM>_<cobol-cursor-name>`, and DB2 ODBC rejects hyphens in a cursor name (failing the `DECLARE`); GixSQL keeps the original name as its internal map key.
 
 ## Building this fork
 
