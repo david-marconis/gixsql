@@ -262,9 +262,17 @@ void SqlVar::createRealData()
 			else {
 				void* actual_addr = (char*)addr + __global_env->varlen_length_sz();
 
-				//VARLEN_LENGTH_T *len_addr = (VARLEN_LENGTH_T *)addr;
-				//int actual_len = (*len_addr);
-				int actual_len = __global_env->varlen_length_sz_short() ? (*((uint16_t*)addr)) : (*((uint32_t*)addr));
+				int actual_len = __global_env->varlen_get_len(addr);
+
+				// Result vars are registered (and pass through here) BEFORE any
+				// FETCH has filled them, so the prefix can be uninitialized
+				// garbage (e.g. spaces = 0x2020 = 8224): never copy more than
+				// the buffer holds, or the heap gets smashed.
+				int max_len = length - __global_env->varlen_length_sz();
+				if (actual_len < 0)
+					actual_len = 0;
+				else if (actual_len > max_len)
+					actual_len = max_len;
 
 				memcpy(db_data_buffer.data(), (char*)actual_addr, actual_len);
 				db_data_len = actual_len;
@@ -641,17 +649,7 @@ void SqlVar::createCobolData(char *retstr, int datalen, int *sqlcode)
 					memcpy(actual_addr, retstr, datalen);
 				}
 
-				//VARLEN_LENGTH_T* fld_len_addr = (VARLEN_LENGTH_T *)addr;
-				//*fld_len_addr = ((VARLEN_LENGTH_T) datalen);
-
-				if (__global_env->varlen_length_sz_short()) {
-					uint16_t* fld_len_addr = (uint16_t*)addr;
-					*fld_len_addr = ((uint16_t)datalen);
-				}
-				else {
-					uint32_t* fld_len_addr = (uint32_t*)addr;
-					*fld_len_addr = ((uint32_t)datalen);
-				}
+				__global_env->varlen_set_len(addr, datalen);
 			}
 			break;
 
