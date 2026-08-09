@@ -1022,6 +1022,18 @@ GIXSQLExecSelectIntoOne(struct sqlca_t* st, void* d_connection_id, int connectio
 		return RESULT_FAILED;
 	}
 
+	// The row count check above is skipped for drivers that cannot report one,
+	// which used to mean a singleton SELECT matching several rows quietly
+	// returned the first of them instead of -811. Look ahead one row instead.
+	// The target host variables are already filled by this point (the resultset
+	// is forward-only, so we cannot peek and then come back) where DB2 would
+	// leave them untouched; the SQLCODE the program tests is the same either way.
+	if (!dbi->has(DbNativeFeature::ResultSetRowCount) && dbi->move_to_next_record()) {
+		spdlog::trace("Too much data");
+		setStatus(st, NULL, DBERR_TOO_MUCH_DATA);
+		return RESULT_FAILED;
+	}
+
 	setStatus(st, NULL, DBERR_NO_ERROR);
 	return RESULT_SUCCESS;
 }
@@ -1341,6 +1353,12 @@ static int setStatus(struct sqlca_t* st, std::shared_ptr<IDbInterface> dbi, int 
 
 	if (err == DBERR_NO_DATA)
 		st->sqlcode = __global_env->norec_sqlcode();
+
+	// A singleton SELECT that matched more than one row is -811 in DB2, and that
+	// is the value applications test for; the internal code is not usable as a
+	// return code the way DBERR_NO_DATA's +100 is.
+	if (err == DBERR_TOO_MUCH_DATA)
+		st->sqlcode = -811;
 
 	return RESULT_SUCCESS;
 }

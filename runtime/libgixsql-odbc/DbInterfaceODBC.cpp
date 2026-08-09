@@ -826,6 +826,24 @@ bool DbInterfaceODBC::move_to_first_record(const std::string& _stmt_name)
 	return true;
 }
 
+// ODBC has no row count to consult (see get_native_features), so the only way to
+// find out whether a singleton SELECT matched more than one row is to fetch
+// again. Deliberately silent: running out of rows is the expected outcome and
+// must not leave an error behind for the caller to trip over.
+bool DbInterfaceODBC::move_to_next_record(const std::string& _stmt_name)
+{
+	std::string stmt_name = to_lower(_stmt_name);
+	std::shared_ptr<ODBCStatementData> dp = stmt_name.empty()
+	                                        ? current_statement_data
+	                                        : (_prepared_stmts.find(stmt_name) != _prepared_stmts.end()
+	                                           ? _prepared_stmts[stmt_name] : nullptr);
+
+	if (!dp || !dp->statement)
+		return false;
+
+	return SQL_SUCCEEDED(SQLFetch(dp->statement));
+}
+
 uint64_t DbInterfaceODBC::get_native_features()
 {
 	return (uint64_t)0;

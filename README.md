@@ -20,6 +20,7 @@ Each change is its own commit on top of upstream, and each commit message explai
 **Runtime (`libgixsql`)**
 
 - Fix the binding of `USAGE COMP` (binary) numeric host variables so every backend sends them as text instead of raw binary, which Db2/ODBC rejected and SQLite mis-bound. Adds a regression test, `TSQL044A`.
+- Report a singleton `SELECT ... INTO` that matched more than one row as `-811`, the code DB2 applications test for, and detect the condition on drivers that cannot report a row count (ODBC, SQLite) by looking ahead one row. Previously such a statement quietly returned the first row with `SQLCODE 0` on those drivers, and the internal `-123` elsewhere.
 - Sanitise hyphens (`-` to `_`) in the DB2-facing cursor name in the ODBC driver. GixSQL mangles cursor names as `<PROGRAM>_<cobol-cursor-name>`, and DB2 ODBC rejects hyphens in a cursor name (failing the `DECLARE`); GixSQL keeps the original name as its internal map key.
 
 ## Building this fork

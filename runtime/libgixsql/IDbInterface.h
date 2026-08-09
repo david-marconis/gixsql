@@ -140,6 +140,14 @@ public:
 	virtual bool get_resultset_value(ResultSetContextType resultset_context_type, const IResultSetContextData& context, int row, int col, char* bfr, uint64_t bfrlen, uint64_t* value_len, bool
 	                                 * is_db_null) = 0;
 	virtual bool move_to_first_record(const std::string& stmt_name = "") = 0;
+
+	// Advance one row, without touching the driver's error state. Only used to
+	// tell "exactly one row" from "more than one" after a singleton SELECT, and
+	// only by drivers that cannot report a row count (no ResultSetRowCount).
+	// The default says "cannot look ahead", which leaves such a driver behaving
+	// as it did before.
+	virtual bool move_to_next_record(const std::string& stmt_name = "") { return false; }
+
 	virtual uint64_t get_native_features() = 0;
 	virtual int get_num_rows(const std::shared_ptr<ICursor>& crsr) = 0;
 	virtual int get_num_fields(const std::shared_ptr<ICursor>& crsr) = 0;
