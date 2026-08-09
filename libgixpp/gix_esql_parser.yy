@@ -187,8 +187,10 @@ static std::string to_std_string(connect_to_info_t *i) { if (i) { char buffer [3
 %token<int> WITH_HOLD		"WITH HOLD"
 %token WHERE_CURRENT_OF		"WHERE CURRENT OF"
 %token PREPARE
+%token SET_ASSIGNMENT		"SET :host-variable ="
 
 %type <std::vector<std::string> *> token_list declaresql includesql incfile opt_othersql_tokens
+%type <std::vector<std::string> *> setassignsql
 %type <std::vector<std::string> *> opensql selectintosql select insertsql insert updatesql 
 %type <std::vector<std::string> *> cursor_declaration cursor_declaration_from_select cursor_declaration_from_prepared_stmt
 %type <std::vector<std::string> *> update deletesql delete disconnect disconnectsql othersql executesql ignoresql
@@ -232,6 +234,7 @@ sqlvariantstates
 | releasesql
 | resetsql
 | othersql
+| setassignsql
 | declaresql
 | preparesql
 | executesql
@@ -602,6 +605,26 @@ opt_othersql_tokens:
 othersql_token:
 host_reference  { $$ = driver->cb_host_list_add (driver->host_reference_list, $1); }
 |TOKEN			{ $$ = $1; }
+;
+
+/* "SET :host-var = <expression>" -- Db2's way of reading a special register into
+   a host variable. Rewritten as the one-row query it really is, "VALUES ( <expr>
+   )", with the assignment target moved to the result list so it is bound as an
+   output. Left to the passthru rule the target became an input parameter, so the
+   host variable was never written and SQLCODE was 0: silent wrong data. */
+setassignsql:
+execsql_with_opt_at SET_ASSIGNMENT host_reference opt_othersql_tokens END_EXEC {
+	driver->cb_res_host_list_add (driver->res_host_reference_list, $3);
+
+	std::vector<cb_sql_token_t> *expr = $4;
+	if (expr && !expr->empty() && expr->front() == "=")
+		expr->erase(expr->begin());
+
+	$$ = driver->cb_text_list_add(NULL, "VALUES (");
+	driver->cb_concat_text_list($$, expr);
+	driver->cb_concat_text_list($$, driver->cb_text_list_add(NULL, ")"));
+	driver->put_exec_list();
+}
 ;
 
 incfile:

@@ -3543,5 +3543,30 @@
 			</expected-output>
 		</test>
 
+		<test name="TSQL045A" enabled="true">
+			<description>DB2 "SET :host-var = expression" assigns to the host variable</description>
+			<issue-coverage>#000</issue-coverage>
+			<group></group>
+			<architecture>all</architecture>
+			<compiler-type>all</compiler-type>
+
+			<cobol-sources>
+				<src name="TSQL045A.cbl" />
+			</cobol-sources>
+
+			<preprocess value="true" />
+			<compile value="true" />
+			<run value="false" />
+
+			<expected-output></expected-output>
+
+			<expected-preprocessed-file-content>
+				<line>VALUE "VALUES ( CURRENT_TIMESTAMP )"</line>
+				<line>"GIXSQLExecSelectIntoOne"</line>
+				<line>BY REFERENCE H-TS</line>
+				<line>VALUE "SET CURRENT SCHEMA = </line>
+			</expected-preprocessed-file-content>
+		</test>
+
 	</tests>
 </test-data>

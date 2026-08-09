@@ -538,8 +538,27 @@ SUBSYSTEM "SQL"|"CICS"|"DLI"
 		return yy::gix_esql_parser::make_WHENEVER(loc);
 	}
 
+	/* Db2's assignment form of SET: "SET :host-var = <expression>", used to read
+	   a special register (CURRENT SERVER, CURRENT_TIMESTAMP, ...) into a host
+	   variable. It is a one-row query written as a statement, so the target is a
+	   *result* variable. The passthru rule below would bind it as an input
+	   parameter instead, leaving it untouched while still reporting SQLCODE 0.
+	   The trailing ":" is what tells this apart from "SET CURRENT <register> =
+	   ...", which assigns to the register and stays a passthru. Reported as a
+	   SELECT so the select-into code path picks it up (see setassignsql). */
+	"SET"/[ \t\r\n]*":" {
+		__yy_push_state(ESQL_STATE);
+
+		driver->commandname = "SELECT";
+
+		driver->sqlnum++;
+		driver->sqlname = string_format("SQ%04d", driver->sqlnum);
+
+		return yy::gix_esql_parser::make_SET_ASSIGNMENT(loc);
+	}
+
 	({WORD}|{JPNWORD})+ {
-		__yy_push_state(ESQL_STATE); 
+		__yy_push_state(ESQL_STATE);
 
 		driver->commandname = "PASSTHRU";
 
