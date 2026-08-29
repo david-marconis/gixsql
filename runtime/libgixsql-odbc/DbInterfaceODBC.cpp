@@ -559,8 +559,10 @@ int DbInterfaceODBC::cursor_close(const std::shared_ptr<ICursor>& cursor)
 
 		SQLHANDLE cursor_handle = dp->statement;
 
+		// Leave dp->statement set: nulling it here kept ~ODBCStatementData from ever
+		// calling SQLFreeHandle, leaking one statement handle per open/close cycle
+		// until the driver ran out (CLI0129E) mid-batch.
 		int rc = SQLCloseCursor(cursor_handle);
-		dp->statement = nullptr;
 		if (odbcRetrieveError(rc, ErrorSource::Statement, cursor_handle) != SQL_SUCCESS) {
 			lib_logger->error("ODBC: Error while closing cursor ({}) {}", last_rc, cursor->getName());
 			return DBERR_CLOSE_CURSOR_FAILED;
