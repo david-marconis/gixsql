@@ -1,4 +1,5 @@
-// The CURRENT PACKAGESET -> CURRENT SCHEMA emulation (utils.cpp packageset_as_schema).
+// The CURRENT PACKAGESET -> CURRENT SCHEMA emulation and the connection
+// default schema (utils.cpp packageset_as_schema, default_schema_statement).
 //   g++ -std=c++17 -I runtime/libgixsql runtime/libgixsql/tests/packageset_schema_test.cpp \
 //       runtime/libgixsql/.libs/libgixsql_la-utils.o -lspdlog -lfmt -o /tmp/pst && /tmp/pst
 #include <cassert>
@@ -27,6 +28,13 @@ int main()
 	setenv("GIXSQL_DEFAULT_SCHEMA", "HOME", 1);
 	assert(packageset_as_schema("Set Current Packageset = ''", NULL, out));
 	assert(out == "SET CURRENT SCHEMA = 'HOME'");
+
+	assert(default_schema_statement(out));
+	assert(out == "SET SCHEMA 'HOME'");
+	setenv("GIXSQL_DEFAULT_SCHEMA", "  ", 1);
+	assert(!default_schema_statement(out));
+	unsetenv("GIXSQL_DEFAULT_SCHEMA");
+	assert(!default_schema_statement(out));
 
 	value = "OTHER";
 	assert(!packageset_as_schema("Set Current Packageset = ?", &value, out));

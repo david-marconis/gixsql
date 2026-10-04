@@ -185,6 +185,17 @@ GIXSQLConnect(struct sqlca_t* st, void* d_data_source, int data_source_tl, void*
 		return RESULT_FAILED;
 	}
 
+	std::string schema_sql;
+	if (default_schema_statement(schema_sql)) {
+		spdlog::debug(FMT_FILE_FUNC "{}", __FILE__, __func__, schema_sql);
+		rc = dbi->exec(schema_sql);
+		if (rc != DBERR_NO_ERROR) {
+			spdlog::error("Cannot set the default schema: {}", schema_sql);
+			setStatus(st, dbi, DBERR_CONNECTION_FAILED);
+			return RESULT_FAILED;
+		}
+	}
+
 	std::shared_ptr<Connection> c = connection_manager.create();
 	c->setName(connection_id);	// it might still be empty, the connection manager will assign a default name
 	c->setConnectionOptions(opts);	// Generic/global connection options, separate from driver-specific options that reside only in the data source info

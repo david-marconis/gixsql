@@ -43,6 +43,7 @@ char *safe_strdup(char * s);
 bool is_commit_or_rollback_statement(std::string query);
 bool is_dml_statement(std::string query);
 bool packageset_as_schema(std::string query, const std::string *value, std::string &schema_sql);
+bool default_schema_statement(std::string &schema_sql);
 bool is_begin_transaction_statement(std::string query);
 
 void ltrim(std::string &s);

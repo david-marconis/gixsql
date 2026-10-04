@@ -296,6 +296,23 @@ bool packageset_as_schema(std::string query, const std::string *value, std::stri
 	return true;
 }
 
+// A static Db2 program qualifies unqualified table names with its package's
+// qualifier from its first statement on. Dynamic SQL uses CURRENT SCHEMA, which
+// starts out as the connecting user. When GIXSQL_DEFAULT_SCHEMA is set, every
+// new connection starts in that schema instead, the same one a blank
+// SET CURRENT PACKAGESET returns to (packageset_as_schema).
+bool default_schema_statement(std::string &schema_sql)
+{
+	const char *schema = getenv("GIXSQL_DEFAULT_SCHEMA");
+	if (schema == NULL)
+		return false;
+	std::string name = trim_copy(schema);
+	if (name.empty())
+		return false;
+	schema_sql = "SET SCHEMA '" + name + "'";
+	return true;
+}
+
 bool is_dml_statement(std::string query)
 {
 	std::string q = trim_copy(query);
