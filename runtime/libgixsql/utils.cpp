@@ -230,6 +230,72 @@ bool is_commit_or_rollback_statement(std::string query)
 	return (q == "COMMIT"  || q == "ROLLBACK");
 }
 
+// Db2 for z/OS resolves unqualified table names through the qualifier of the
+// package collection in CURRENT PACKAGESET, so an application can move to
+// another set of tables by switching collections. GixSQL runs SQL dynamically,
+// where CURRENT PACKAGESET qualifies nothing. To emulate it, set
+// GIXSQL_PACKAGESET_SCHEMAS to a comma-separated list of collection=schema
+// pairs: SET CURRENT PACKAGESET to a listed collection runs SET CURRENT SCHEMA
+// to its schema instead, and a blank collection returns to
+// GIXSQL_DEFAULT_SCHEMA. `value` is the right-hand side when it was a host
+// variable. Any other statement or collection is left as it is.
+bool packageset_as_schema(std::string query, const std::string *value, std::string &schema_sql)
+{
+	const char *mapping = getenv("GIXSQL_PACKAGESET_SCHEMAS");
+	if (mapping == NULL || *mapping == 0)
+		return false;
+
+	std::string q = trim_copy(query);
+	std::transform(q.begin(), q.end(), q.begin(), ::toupper);
+	if (!starts_with(q, "SET CURRENT PACKAGESET"))
+		return false;
+	size_t eq = q.find('=');
+	if (eq == std::string::npos)
+		return false;
+
+	std::string rhs = trim_copy(q.substr(eq + 1));
+	std::string collection;
+	if (rhs == "?" && value != NULL) {
+		collection = trim_copy(*value);
+		std::transform(collection.begin(), collection.end(), collection.begin(), ::toupper);
+	}
+	else if (rhs.size() >= 2 && rhs.front() == '\'' && rhs.back() == '\'') {
+		collection = trim_copy(rhs.substr(1, rhs.size() - 2));
+	}
+	else {
+		return false;
+	}
+
+	std::string schema;
+	if (collection.empty()) {
+		const char *fallback = getenv("GIXSQL_DEFAULT_SCHEMA");
+		if (fallback == NULL || *fallback == 0)
+			return false;
+		schema = fallback;
+	}
+	else {
+		std::string pairs = mapping;
+		std::transform(pairs.begin(), pairs.end(), pairs.begin(), ::toupper);
+		size_t start = 0;
+		while (start <= pairs.size()) {
+			size_t end = pairs.find(',', start);
+			std::string pair = pairs.substr(start, end == std::string::npos ? std::string::npos : end - start);
+			size_t sep = pair.find('=');
+			if (sep != std::string::npos && trim_copy(pair.substr(0, sep)) == collection) {
+				schema = trim_copy(pair.substr(sep + 1));
+				break;
+			}
+			if (end == std::string::npos)
+				break;
+			start = end + 1;
+		}
+		if (schema.empty())
+			return false;
+	}
+	schema_sql = "SET CURRENT SCHEMA = '" + schema + "'";
+	return true;
+}
+
 bool is_dml_statement(std::string query)
 {
 	std::string q = trim_copy(query);

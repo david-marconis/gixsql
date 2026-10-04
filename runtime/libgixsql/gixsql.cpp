@@ -318,6 +318,12 @@ static int _gixsqlExec(const std::shared_ptr<IConnection>& conn, struct sqlca_t*
 		cursor_manager.closeConnectionCursors(conn->getId(), false);
 	}
 
+	std::string schema_sql;
+	if (packageset_as_schema(query, NULL, schema_sql)) {
+		spdlog::debug(FMT_FILE_FUNC "{} -> {}", __FILE__, __func__, query, schema_sql);
+		query = schema_sql;
+	}
+
 	rc = dbi->exec(query);
 	FAIL_ON_ERROR(rc, st, dbi, DBERR_SQL_ERROR)
 
@@ -388,6 +394,18 @@ static int _gixsqlExecParams(const std::shared_ptr<IConnection>& conn, struct sq
 
 	if (is_commit_or_rollback_statement(query)) {
 		cursor_manager.closeConnectionCursors(conn->getId(), false);
+	}
+
+	std::string schema_sql;
+	if (nParams == 1) {
+		std::string value(param_values[0].begin(), param_values[0].end());
+		if (packageset_as_schema(query, &value, schema_sql)) {
+			spdlog::debug(FMT_FILE_FUNC "{} ({}) -> {}", __FILE__, __func__, query, value, schema_sql);
+			rc = dbi->exec(schema_sql);
+			FAIL_ON_ERROR(rc, st, dbi, DBERR_SQL_ERROR)
+			setStatus(st, NULL, DBERR_NO_ERROR);
+			return RESULT_SUCCESS;
+		}
 	}
 
 	rc = dbi->exec_params(query, param_types, param_values, param_lengths, param_flags);
