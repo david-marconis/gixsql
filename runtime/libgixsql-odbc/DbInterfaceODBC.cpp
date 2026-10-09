@@ -1047,7 +1047,13 @@ int DbInterfaceODBC::odbcRetrieveError(int rc, ErrorSource err_src, SQLHANDLE h)
 				last_error += ',';
 		}
 
-		if (rc == SQL_SUCCESS_WITH_INFO) {
+		if (rc == SQL_NO_DATA) {
+			// A searched UPDATE/DELETE or INSERT-SELECT that touched no row:
+			// Db2 CLI reports native +100, which the branch below would negate.
+			last_rc = NO_REC_CODE_DEFAULT;
+			strcpy((char*)&main_SQLState, "02000");
+		}
+		else if (rc == SQL_SUCCESS_WITH_INFO) {
 			last_rc = abs(main_NativeError);
 		}
 		else {
