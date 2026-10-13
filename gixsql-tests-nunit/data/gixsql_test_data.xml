@@ -3606,5 +3606,47 @@
 			</expected-output>
 		</test>
 
+		<test name="TSQL047A" enabled="true">
+			<description>FETCH and SELECT INTO with fewer host variables than columns</description>
+			<issue-coverage>#000</issue-coverage>
+			<group></group>
+			<architecture>all</architecture>
+			<compiler-type>all</compiler-type>
+
+			<cobol-sources>
+				<src name="TSQL047A.cbl" />
+			</cobol-sources>
+
+			<data-sources count="1" />
+			<pre-run-drop-table data-source-index="1">tab1</pre-run-drop-table>
+			<pre-run-sql-statement data-source-index="1">CREATE TABLE TAB1 (FLD1 INT, FLD2 CHAR(8), FLD3 INT)</pre-run-sql-statement>
+			<pre-run-sql-statement data-source-index="1">INSERT INTO TAB1(FLD1, FLD2, FLD3) VALUES(1, 'ONE', 10)</pre-run-sql-statement>
+			<pre-run-sql-statement data-source-index="1">INSERT INTO TAB1(FLD1, FLD2, FLD3) VALUES(2, 'TWO', 20)</pre-run-sql-statement>
+
+			<environment>
+				<variable key="DATASRC" value="${datasource1-noauth-url}" />
+				<variable key="DATASRC_USR" value="${datasource1-username}.${datasource1-password}" />
+			</environment>
+
+			<preprocess value="true" />
+			<compile value="true" />
+			<run value="true" />
+
+			<expected-output>
+				<line>SELECT SQLCODE: +0000000000</line>
+				<line>SELECT SQLWARN0: [W]</line>
+				<line>SELECT SQLWARN3: [W]</line>
+				<line>SELECT: 0001 ONE     </line>
+				<line>SELECT SQLCODE: +0000000000</line>
+				<line>SELECT SQLWARN3: [ ]</line>
+				<line>FETCH SQLCODE: +0000000000</line>
+				<line>FETCH SQLWARN3: [W]</line>
+				<line>FETCH: 0001 ONE     </line>
+				<line>FETCH SQLCODE: +0000000000</line>
+				<line>FETCH: 0002 TWO     </line>
+				<line>FETCH SQLCODE: +0000000100</line>
+			</expected-output>
+		</test>
+
 	</tests>
 </test-data>

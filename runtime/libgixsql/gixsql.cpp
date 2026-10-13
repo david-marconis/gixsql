@@ -81,6 +81,7 @@ static CursorManager cursor_manager;
 
 static void sqlca_initialize(struct sqlca_t*);
 static int setStatus(struct sqlca_t* st, std::shared_ptr<IDbInterface> dbi, int err);
+static void set_fewer_host_vars_warning(struct sqlca_t* st);
 static AutoCommitMode get_autocommit(const std::shared_ptr<DataSourceInfo>& ds);
 static bool get_fixup_params(const std::shared_ptr<DataSourceInfo>&);
 static std::string get_client_encoding(const std::shared_ptr<DataSourceInfo>&);
@@ -515,11 +516,12 @@ LIBGIXSQL_API int GIXSQLExecPreparedInto(sqlca_t* st, void* d_connection_id, int
 	spdlog::trace(FMT_FILE_FUNC "move_to_first_record successful", __FILE__, __func__);
 
 	int nfields = dbi->get_num_fields(nullptr);
-	if (nfields != nResParams) {
+	if (nfields < nResParams) {
 		spdlog::error("ResParams({}) and fields({}) are different", nResParams, nfields);
 		setStatus(st, NULL, DBERR_FIELD_COUNT_MISMATCH);
 		return RESULT_FAILED;
 	}
+	bool fewer_host_vars = nfields > nResParams;
 
 	// Some drivers (notably DB2, both natevely and under ODBC, do not support SQLNumRows, so we have to check here
 	if (dbi->has(DbNativeFeature::ResultSetRowCount)) {
@@ -570,6 +572,8 @@ LIBGIXSQL_API int GIXSQLExecPreparedInto(sqlca_t* st, void* d_connection_id, int
 	}
 
 	setStatus(st, NULL, DBERR_NO_ERROR);
+	if (fewer_host_vars)
+		set_fewer_host_vars_warning(st);
 	return RESULT_SUCCESS;
 }
 
@@ -834,11 +838,12 @@ LIBGIXSQL_API int GIXSQLCursorFetchOne(struct sqlca_t* st, char* cname)
 
 		int nResParams = _res_sql_var_list.size();
 	int nfields = dbi->get_num_fields(cursor);
-	if (nfields != nResParams) {
+	if (nfields < nResParams) {
 		spdlog::error("ResParams({}) and fields({}) are different", nResParams, nfields);
 		setStatus(st, dbi, DBERR_FIELD_COUNT_MISMATCH);
 		return RESULT_FAILED;
 	}
+	bool fewer_host_vars = nfields > nResParams;
 
 	uint64_t bsize = _res_sql_var_list.getMaxLength() + __global_env->varlen_length_sz() + 1;
 	std::unique_ptr<char[]> buffer = std::make_unique<char[]>(bsize);
@@ -871,6 +876,8 @@ LIBGIXSQL_API int GIXSQLCursorFetchOne(struct sqlca_t* st, char* cname)
 	}
 
 	setStatus(st, NULL, DBERR_NO_ERROR);
+	if (fewer_host_vars)
+		set_fewer_host_vars_warning(st);
 	return RESULT_SUCCESS;
 
 }
@@ -996,11 +1003,12 @@ GIXSQLExecSelectIntoOne(struct sqlca_t* st, void* d_connection_id, int connectio
 	spdlog::trace(FMT_FILE_FUNC "move_to_first_record successful", __FILE__, __func__);
 
 	int nfields = dbi->get_num_fields(nullptr);
-	if (nfields != nResParams) {
+	if (nfields < nResParams) {
 		spdlog::error("ResParams({}) and fields({}) are different", nResParams, nfields);
 		setStatus(st, NULL, DBERR_FIELD_COUNT_MISMATCH);
 		return RESULT_FAILED;
 	}
+	bool fewer_host_vars = nfields > nResParams;
 
 	// Some drivers (notably DB2, both natevely and under ODBC, do not support SQLNumRows, so we have to check here
 	if (dbi->has(DbNativeFeature::ResultSetRowCount)) {
@@ -1064,6 +1072,8 @@ GIXSQLExecSelectIntoOne(struct sqlca_t* st, void* d_connection_id, int connectio
 	}
 
 	setStatus(st, NULL, DBERR_NO_ERROR);
+	if (fewer_host_vars)
+		set_fewer_host_vars_warning(st);
 	return RESULT_SUCCESS;
 }
 
@@ -1189,6 +1199,17 @@ static void set_sqlerrm(struct sqlca_t* st, const char* m)
 		st->sqlerrm.sqlerrmc[69] = 0;
 	}
 	st->sqlerrm.sqlerrml = strlen(st->sqlerrm.sqlerrmc);
+}
+
+// Db2 for z/OS does not fail a FETCH or SELECT INTO whose result row has more
+// columns than the INTO list names host variables: it assigns the first ones,
+// returns SQLCODE 0 and flags the row with SQLWARN3 (and SQLWARN0), SQLSTATE
+// 01503. Call after setStatus(..., DBERR_NO_ERROR).
+static void set_fewer_host_vars_warning(struct sqlca_t* st)
+{
+	st->sqlwarn[0] = 'W';
+	st->sqlwarn[3] = 'W';
+	memcpy(st->sqlstate, "01503", 5);
 }
 
 static int setStatus(struct sqlca_t* st, std::shared_ptr<IDbInterface> dbi, int err)
