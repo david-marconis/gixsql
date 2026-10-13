@@ -122,6 +122,7 @@
     <EmbeddedResource Include="data\TSQL043A.cbl" />
     <EmbeddedResource Include="data\TSQL044A.cbl" />
     <EmbeddedResource Include="data\TSQL045A.cbl" />
+    <EmbeddedResource Include="data\TSQL046A.cbl" />
     <EmbeddedResource Include="data\TSQL042A.cbl" />
     <EmbeddedResource Include="data\TSQL001A.cbl" />
     <EmbeddedResource Include="data\TSQL002A.cbl" />

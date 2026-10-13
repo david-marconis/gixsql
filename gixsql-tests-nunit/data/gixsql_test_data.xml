@@ -3568,5 +3568,43 @@
 			</expected-preprocessed-file-content>
 		</test>
 
+		<test name="TSQL046A" enabled="true">
+			<description>Binary host variables at full picture width as parameters</description>
+			<issue-coverage>#000</issue-coverage>
+			<group></group>
+			<architecture>all</architecture>
+			<compiler-type>all</compiler-type>
+
+			<cobol-sources>
+				<src name="TSQL046A.cbl" />
+			</cobol-sources>
+
+			<data-sources count="1" />
+			<pre-run-drop-table data-source-index="1">tab1</pre-run-drop-table>
+			<pre-run-sql-statement data-source-index="1">CREATE TABLE TAB1 (FLD1 BIGINT, FLD2 BIGINT, FLD3 BIGINT, FLD4 BIGINT, FLD5 BIGINT)</pre-run-sql-statement>
+
+			<environment>
+				<variable key="DATASRC" value="${datasource1-noauth-url}" />
+				<variable key="DATASRC_USR" value="${datasource1-username}.${datasource1-password}" />
+			</environment>
+
+			<preprocess value="true" />
+			<compile value="true" />
+			<run value="true" />
+
+			<expected-output>
+				<line>INSERT SQLCODE: +0000000000</line>
+				<line>INSERT SQLCODE: +0000000000</line>
+				<line>FLD1:  000000000000001801</line>
+				<line>FLD1: -000000000000009999</line>
+				<line>FLD2:  000000000000009999</line>
+				<line>FLD3: -000000000999999999</line>
+				<line>FLD4:  000000000999999999</line>
+				<line>FLD5: -999999999999999999</line>
+				<line>COUNT SQLCODE: +0000000000</line>
+				<line>COUNT: 0001</line>
+			</expected-output>
+		</test>
+
 	</tests>
 </test-data>
