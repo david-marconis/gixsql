@@ -3648,5 +3648,47 @@
 			</expected-output>
 		</test>
 
+		<test name="TSQL048A" enabled="true">
+			<description>String literals with dots and blanks in a cursor's query</description>
+			<issue-coverage>#000</issue-coverage>
+			<group></group>
+			<architecture>all</architecture>
+			<compiler-type>all</compiler-type>
+
+			<cobol-sources>
+				<src name="TSQL048A.cbl" />
+			</cobol-sources>
+
+			<data-sources count="1" />
+			<pre-run-drop-table data-source-index="1">tab1</pre-run-drop-table>
+			<pre-run-sql-statement data-source-index="1">CREATE TABLE TAB1 (FLD1 INT, FLD2 VARCHAR(16))</pre-run-sql-statement>
+			<pre-run-sql-statement data-source-index="1">INSERT INTO TAB1(FLD1, FLD2) VALUES(1, '00.00.00')</pre-run-sql-statement>
+			<pre-run-sql-statement data-source-index="1">INSERT INTO TAB1(FLD1, FLD2) VALUES(2, '00.0000')</pre-run-sql-statement>
+			<pre-run-sql-statement data-source-index="1">INSERT INTO TAB1(FLD1, FLD2) VALUES(3, 'a.b.c.d.e')</pre-run-sql-statement>
+			<pre-run-sql-statement data-source-index="1">INSERT INTO TAB1(FLD1, FLD2) VALUES(4, 'a.bc.de')</pre-run-sql-statement>
+			<pre-run-sql-statement data-source-index="1">INSERT INTO TAB1(FLD1, FLD2) VALUES(5, 'x   y')</pre-run-sql-statement>
+			<pre-run-sql-statement data-source-index="1">INSERT INTO TAB1(FLD1, FLD2) VALUES(6, 'x y')</pre-run-sql-statement>
+
+			<environment>
+				<variable key="DATASRC" value="${datasource1-noauth-url}" />
+				<variable key="DATASRC_USR" value="${datasource1-username}.${datasource1-password}" />
+			</environment>
+
+			<preprocess value="true" />
+			<compile value="true" />
+			<run value="true" />
+
+			<expected-output>
+				<line>CRSR01 SQLCODE: +0000000000</line>
+				<line>CRSR01: 0001</line>
+				<line>CRSR01 SQLCODE: +0000000100</line>
+				<line>CRSR02 SQLCODE: +0000000000</line>
+				<line>CRSR02: 0003</line>
+				<line>CRSR02 SQLCODE: +0000000000</line>
+				<line>CRSR02: 0005</line>
+				<line>CRSR02 SQLCODE: +0000000100</line>
+			</expected-output>
+		</test>
+
 	</tests>
 </test-data>

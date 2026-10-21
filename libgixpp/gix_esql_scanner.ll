@@ -131,6 +131,8 @@ WORD ([A-Za-z\+\-0-9_]|[(]|[)]|[\']|[`])
 INCFILE [A-Za-z0-9_\+\-\.]+|"\""[A-Za-z0-9_\+\-\.]+"\""|"'"[A-Za-z0-9_\+\-\.]+"'"
 FILENAME [A-Za-z0-9_\+\-\.]+
 STRVALUE "\""[^\"]+"\""|"\'"[^\n]*"\'"
+/* One SQL string literal, a doubled quote being a quote in it. */
+SQLSTRING "'"([^'\n]|"''")*"'"
 HEXVALUE "X\""[^\"]+"\""|"X\'"[^\']+"\'"
 SELF [,()\[\].;\:\+\-\*\/\%\^\<\>\=]
 OP_CHARS [\~\!\@\#\^\&\|\`\?\+\-\*\/\%\<\>\=]
@@ -1052,6 +1054,13 @@ SUBSYSTEM "SQL"|"CICS"|"DLI"
 	}
 
 	{PGSQL_CAST_OP} {
+		return __MAKE_TOKEN(yytext, loc);
+	}
+
+	/* A literal is one token: left to the word rule below it is cut at its
+	   dots and every second one is lost ('00.00.00' becomes '00.0000'), and
+	   runs of blanks in it collapse. */
+	{SQLSTRING} {
 		return __MAKE_TOKEN(yytext, loc);
 	}
 	
