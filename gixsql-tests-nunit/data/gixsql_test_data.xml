@@ -3690,5 +3690,41 @@
 			</expected-output>
 		</test>
 
+		<test name="TSQL049A" enabled="true">
+			<description>COMP-5 host variables in the machine's byte order, COMP big-endian</description>
+			<issue-coverage>#000</issue-coverage>
+			<group></group>
+			<architecture>all</architecture>
+			<compiler-type>all</compiler-type>
+
+			<cobol-sources>
+				<src name="TSQL049A.cbl" />
+			</cobol-sources>
+
+			<data-sources count="1" />
+			<pre-run-drop-table data-source-index="1">tab1</pre-run-drop-table>
+			<pre-run-sql-statement data-source-index="1">CREATE TABLE TAB1 (FLD1 INT, FLD2 SMALLINT, FLD3 INT, FLD4 BIGINT)</pre-run-sql-statement>
+
+			<environment>
+				<variable key="DATASRC" value="${datasource1-noauth-url}" />
+				<variable key="DATASRC_USR" value="${datasource1-username}.${datasource1-password}" />
+			</environment>
+
+			<preprocess value="true" />
+			<compile value="true" />
+			<run value="true" />
+
+			<expected-output>
+				<line>INSERT SQLCODE: +0000000000</line>
+				<line>SELECT SQLCODE: +0000000000</line>
+				<line>COMP-5: 0001 000000300 000000005000000000</line>
+				<line>COMP-5 + 1: 0002 000000301</line>
+				<line>COMP: 0001 000000300</line>
+				<line>COMP in, COMP-5 out: 0007 000000700</line>
+				<line>SELECT BY COMP-5 SQLCODE: +0000000000</line>
+				<line>SELECT BY COMP-5: 0002</line>
+			</expected-output>
+		</test>
+
 	</tests>
 </test-data>

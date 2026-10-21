@@ -53,10 +53,18 @@
 #define COB_BSWAP_64(val) (_byteswap_uint64 (val))
 #endif
 
+// A COMP host variable is big-endian, as the COBOL is compiled with big-endian
+// BINARY fields; a COMP-5 one is in the machine's own order and needs no swap.
+static inline uint16_t bin16(bool native, uint16_t val) { return native ? val : COB_BSWAP_16(val); }
+static inline uint32_t bin32(bool native, uint32_t val) { return native ? val : COB_BSWAP_32(val); }
+static inline uint64_t bin64(bool native, uint64_t val) { return native ? val : COB_BSWAP_64(val); }
+
+
 #define CBL_FIELD_FLAG_NONE		(uint32_t)0x0
 #define CBL_FIELD_FLAG_VARLEN	(uint32_t)0x80
 #define CBL_FIELD_FLAG_BINARY	(uint32_t)0x100
 #define CBL_FIELD_FLAG_AUTOTRIM	(uint32_t)0x200
+#define CBL_FIELD_FLAG_NATIVE_BINARY	(uint32_t)0x400
 
 #define ASCII_ZERO ((unsigned char)0x30)
 
@@ -89,6 +97,7 @@ SqlVar::SqlVar(CobolVarType _type, int _length, int _power, uint32_t _flags, voi
 	is_variable_length = (flags & CBL_FIELD_FLAG_VARLEN);
 	is_binary = (flags & CBL_FIELD_FLAG_BINARY);
 	is_autotrim = (flags & CBL_FIELD_FLAG_AUTOTRIM);
+	is_native_binary = (flags & CBL_FIELD_FLAG_NATIVE_BINARY);
 	allocate_realdata_buffer();
 }
 
@@ -106,6 +115,7 @@ SqlVar* SqlVar::copy()
 	v->is_variable_length = is_variable_length;
 	v->is_binary = is_binary;
 	v->is_autotrim = is_autotrim;
+	v->is_native_binary = is_native_binary;
 
 	return v;
 }
@@ -304,7 +314,7 @@ void SqlVar::createRealData()
 				case 3:	case 4:
 				{	// 2 bytes
 					uint16_t n16 = *((uint16_t*)addr);
-					n16 = COB_BSWAP_16(n16);
+					n16 = bin16(is_native_binary, n16);
 					snprintf((char*)db_data_buffer.data(), db_data_buffer_len, "%d", n16);
 				}
 				break;
@@ -312,7 +322,7 @@ void SqlVar::createRealData()
 				case 5: case 6: case 7: case 8: case 9:
 				{	// 4 bytes
 					uint32_t n32 = *((uint32_t*)addr);
-					n32 = COB_BSWAP_32(n32);
+					n32 = bin32(is_native_binary, n32);
 					snprintf((char*)db_data_buffer.data(), db_data_buffer_len, "%u", n32);
 				}
 				break;
@@ -320,7 +330,7 @@ void SqlVar::createRealData()
 				case 10: case 11: case 12: case 13: case 14: case 15: case 16: case 17: case 18:
 				{
 					uint64_t n64 = *((uint64_t*)addr);
-					n64 = COB_BSWAP_64(n64);
+					n64 = bin64(is_native_binary, n64);
 					snprintf((char*)db_data_buffer.data(), db_data_buffer_len, "%" PRIu64, n64);
 				}
 				break;
@@ -358,7 +368,7 @@ void SqlVar::createRealData()
 				case 3:	case 4:
 				{	// 2 bytes
 					int16_t n16 = *((int16_t*)addr);
-					n16 = COB_BSWAP_16(n16);
+					n16 = bin16(is_native_binary, n16);
 					snprintf((char*)db_data_buffer.data(), db_data_buffer_len, "%d", n16);
 				}
 				break;
@@ -366,7 +376,7 @@ void SqlVar::createRealData()
 				case 5: case 6: case 7: case 8: case 9:
 				{	// 4 bytes
 					int32_t n32 = *((int32_t*)addr);
-					n32 = COB_BSWAP_32(n32);
+					n32 = bin32(is_native_binary, n32);
 					snprintf((char*)db_data_buffer.data(), db_data_buffer_len, "%d", n32);
 				}
 				break;
@@ -374,7 +384,7 @@ void SqlVar::createRealData()
 				case 10: case 11: case 12: case 13: case 14: case 15: case 16: case 17: case 18:
 				{	// 8 bytes
 					int64_t n64 = *((int64_t*)addr);
-					n64 = COB_BSWAP_64(n64);
+					n64 = bin64(is_native_binary, n64);
 					snprintf((char*)db_data_buffer.data(), db_data_buffer_len, "%" PRId64, n64);
 				}
 				break;
@@ -691,22 +701,22 @@ void SqlVar::createCobolData(char *retstr, int datalen, int *sqlcode)
 				case 3:	case 4:
 				{	// 2 bytes
 					uint16_t  u_short_number = (uint16_t)strtoull(retstr, NULL, 0);
-					*((uint16_t*)addr) = COB_BSWAP_16(u_short_number);
+					*((uint16_t*)addr) = bin16(is_native_binary, u_short_number);
 				}
 				break;
 
 				case 5: case 6: case 7: case 8: case 9:
 				{	// 4 bytes
 					uint32_t  u_int_number = (uint32_t)strtoull(retstr, NULL, 0);
-					uint32_t t = COB_BSWAP_32(u_int_number);
-					*((uint32_t*)addr) = COB_BSWAP_32(u_int_number);
+					uint32_t t = bin32(is_native_binary, u_int_number);
+					*((uint32_t*)addr) = bin32(is_native_binary, u_int_number);
 				}
 				break;
 
 				case 10: case 11: case 12: case 13: case 14: case 15: case 16: case 17: case 18:
 				{	// 8 bytes
 					uint64_t  u_long_number = (uint64_t)strtoull(retstr, NULL, 0);
-					*((uint64_t*)addr) = COB_BSWAP_64(u_long_number);
+					*((uint64_t*)addr) = bin64(is_native_binary, u_long_number);
 				}
 				break;
 
@@ -738,21 +748,21 @@ void SqlVar::createCobolData(char *retstr, int datalen, int *sqlcode)
 				case 3:	case 4:
 				{	// 2 bytes
 					int16_t  s_short_number = (int16_t)strtoll(retstr, NULL, 0);
-					*((int16_t*)addr) = COB_BSWAP_16(s_short_number);
+					*((int16_t*)addr) = bin16(is_native_binary, s_short_number);
 				}
 				break;
 
 				case 5: case 6: case 7: case 8: case 9:
 				{	// 4 bytes
 					int32_t  s_int_number = (int32_t)strtoll(retstr, NULL, 0);
-					*((int32_t*)addr) = COB_BSWAP_32(s_int_number);
+					*((int32_t*)addr) = bin32(is_native_binary, s_int_number);
 				}
 				break;
 
 				case 10: case 11: case 12: case 13: case 14: case 15: case 16: case 17: case 18:
 				{	// 8 bytes
 					int64_t  s_long_number = (int64_t)strtoll(retstr, NULL, 0);
-					*((int64_t*)addr) = COB_BSWAP_64(s_long_number);
+					*((int64_t*)addr) = bin64(is_native_binary, s_long_number);
 				}
 				break;
 

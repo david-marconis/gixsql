@@ -53,6 +53,18 @@ USA.
 #define CBL_FIELD_FLAG_BINARY	(uint32_t)0x100
 
 #define CBL_FIELD_FLAG_AUTOTRIM	(uint32_t)0x200
+#define CBL_FIELD_FLAG_NATIVE_BINARY	(uint32_t)0x400
+
+// The flag a host variable's usage adds to its descriptor: BINARY is kept as it was,
+// and COMP-5 says its bytes are in the machine's own order, where COMP is big-endian.
+static int binary_flag(Usage usage)
+{
+	if (usage == Usage::Binary)
+		return CBL_FIELD_FLAG_BINARY;
+	if (usage == Usage::NativeBinary)
+		return CBL_FIELD_FLAG_NATIVE_BINARY;
+	return CBL_FIELD_FLAG_NONE;
+}
 
 #define MAP_FILE_FMT_VER ((uint16_t) 0x0100)
 #define FLAG_M_BASE					0
@@ -1011,7 +1023,7 @@ bool TPESQLProcessor::handle_esql_stmt(const ESQL_Command cmd, const cb_exec_sql
 					++leaf_idx;
 
 					ESQLCall pp_call(get_call_id("SetResultParams"), emit_static);
-					int pp_flags = (pp->usage == Usage::Binary) ? CBL_FIELD_FLAG_BINARY : CBL_FIELD_FLAG_NONE;
+					int pp_flags = binary_flag(pp->usage);
 
 					CobolVarType pp_type = CobolVarType::UNKNOWN;
 					int pp_size = 0, pp_scale = 0;
@@ -1042,7 +1054,7 @@ bool TPESQLProcessor::handle_esql_stmt(const ESQL_Command cmd, const cb_exec_sql
 				}
 
 				int flags = is_varlen ? CBL_FIELD_FLAG_VARLEN : CBL_FIELD_FLAG_NONE;
-				flags |= (hr->usage == Usage::Binary) ? CBL_FIELD_FLAG_BINARY : CBL_FIELD_FLAG_NONE;
+				flags |= binary_flag(hr->usage);
 
 				rp_call.addParameter(f_type, BY_VALUE);
 				rp_call.addParameter(f_size, BY_VALUE);
@@ -1160,7 +1172,7 @@ bool TPESQLProcessor::handle_esql_stmt(const ESQL_Command cmd, const cb_exec_sql
 					++leaf_idx;
 
 					ESQLCall pp_call(get_call_id("SetSQLParams"), emit_static);
-					int pp_flags = (pp->usage == Usage::Binary) ? CBL_FIELD_FLAG_BINARY : CBL_FIELD_FLAG_NONE;
+					int pp_flags = binary_flag(pp->usage);
 
 					uint32_t _type, _precision;
 					uint16_t _scale;
@@ -1193,7 +1205,7 @@ bool TPESQLProcessor::handle_esql_stmt(const ESQL_Command cmd, const cb_exec_sql
 			else {
 				ESQLCall p_call(get_call_id("SetSQLParams"), emit_static);
 				int flags = is_varlen ? CBL_FIELD_FLAG_VARLEN : CBL_FIELD_FLAG_NONE;
-				flags |= (hr->usage == Usage::Binary) ? CBL_FIELD_FLAG_BINARY : CBL_FIELD_FLAG_NONE;
+				flags |= binary_flag(hr->usage);
 
 				uint32_t _type, _precision;
 				uint16_t _scale;
@@ -2195,7 +2207,7 @@ bool TPESQLProcessor::put_res_host_parameters(const cb_exec_sql_stmt_ptr stmt, i
 				++leaf_idx;
 
 				ESQLCall pp_call(get_call_id("SetResultParams"), emit_static);
-				int pp_flags = (pp->usage == Usage::Binary) ? CBL_FIELD_FLAG_BINARY : CBL_FIELD_FLAG_NONE;
+				int pp_flags = binary_flag(pp->usage);
 
 				CobolVarType pp_type = CobolVarType::UNKNOWN;
 				int pp_size = 0, pp_scale = 0;
@@ -2221,7 +2233,7 @@ bool TPESQLProcessor::put_res_host_parameters(const cb_exec_sql_stmt_ptr stmt, i
 			ESQLCall rp_call(get_call_id("SetResultParams"), emit_static);
 
 			int flags = is_varlen ? CBL_FIELD_FLAG_VARLEN : CBL_FIELD_FLAG_NONE;
-			flags |= (hr->usage == Usage::Binary) ? CBL_FIELD_FLAG_BINARY : CBL_FIELD_FLAG_NONE;
+			flags |= binary_flag(hr->usage);
 
 			rp_call.addParameter(f_type, BY_VALUE);
 			rp_call.addParameter(f_size, BY_VALUE);
@@ -2267,7 +2279,7 @@ bool TPESQLProcessor::put_host_parameters(const cb_exec_sql_stmt_ptr stmt)
 		bool is_varlen = parser_data->get_actual_field_data(hr, &f_type, &f_size, &f_scale);
 
 		int flags = is_varlen ? CBL_FIELD_FLAG_VARLEN : CBL_FIELD_FLAG_NONE;
-		flags |= (hr->usage == Usage::Binary) ? CBL_FIELD_FLAG_BINARY : CBL_FIELD_FLAG_NONE;
+		flags |= binary_flag(hr->usage);
 
 		uint32_t hr_type, hr_precision;
 		uint16_t hr_scale;

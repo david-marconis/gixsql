@@ -81,6 +81,9 @@ private:
 	// auto-trim for CHAR(x) fields (i.e. gixpp with --picx-as=varchar)
 	bool is_autotrim = false;
 
+	// COMP-5: the binary bytes are in the machine's own order, not big-endian
+	bool is_native_binary = false;
+
 
     static const char _decimal_point;
 
